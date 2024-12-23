@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Search Results</title>
+</head>
+<body>
+  <h1>Search Results for "<%= searchTerm %>"</h1>
+  <ul>
+    <% profiles.forEach(profile => { %>
+      <li>
+        <img src="<%= profile.profilePic %>" alt="<%= profile.name %>" width="50">
+        <h2><%= profile.name %></h2>
+        <p>Email: <%= profile.email %></p>
+        <p>Bio: <%= profile.bio %></p>
+        <p>Followers: <%= profile.followers.length %></p>
+        <form action="/follow/<%= profile.id %>" method="POST" style="display: inline;">
+          <input type="hidden" name="followerId" value="1"> <!-- Replace 1 with the current user's ID -->
+          <button type="submit">Follow</button>
+        </form>
+        <form action="/unfollow/<%= profile.id %>" method="POST" style="display: inline;">
+          <input type="hidden" name="followerId" value="1"> <!-- Replace 1 with the current user's ID -->
+          <button type="submit">Unfollow</button>
+        </form>
+      </li>
+    <% }) %>
+  </ul>
+  <a href="/profiles">Back to Profiles</a>
+</body>
+</html>

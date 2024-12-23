@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Posts</title>
+</head>
+<body>
+  <h1>Posts</h1>
+  <ul>
+    <% posts.forEach(post => { %>
+      <li>
+        <p><%= post.content %></p>
+        <p>Likes: <%= post.likes %> Dislikes: <%= post.dislikes %></p>
+        <form action="/like-post/<%= post.id %>" method="POST">
+          <button type="submit">Like</button>
+        </form>
+        <form action="/dislike-post/<%= post.id %>" method="POST">
+          <label for="reason">Reason for dislike:</label>
+          <input type="text" id="reason" name="reason" required>
+          <button type="submit">Dislike</button>
+        </form>
+        <h3>Comments</h3>
+        <ul>
+          <% post.comments.forEach(comment => { %>
+            <li>
+              <p><%= comment.content %></p>
+              <p>Likes: <%= comment.likes %> Dislikes: <%= comment.dislikes %></p>
+              <form action="/like-comment/<%= post.id %>/<%= comment.id %>" method="POST">
+                <button type="submit">Like</button>
+              </form>
+              <form action="/dislike-comment/<%= post.id %>/<%= comment.id %>" method="POST">
+                <label for="reason">Reason for dislike:</label>
+                <input type="text" id="reason" name="reason" required>
+                <button type="submit">Dislike</button>
+              </form>
+            </li>
+          <% }) %>
+        </ul>
+        <form action="/add-comment/<%= post.id %>" method="POST">
+          <label for="content">Add comment:</label>
+          <input type="text" id="content" name="content" required>
+          <button type="submit">Add Comment</button>
+        </form>
+      </li>
+    <% }) %>
+  </ul>
+</body>
+</html>

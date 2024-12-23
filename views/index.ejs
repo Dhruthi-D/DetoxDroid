@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Social Media App - Welcome</title>
+    <style>
+      /* General Styles */
+      body {
+        font-family: "Arial", sans-serif;
+        background-color: #111;
+        color: white;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        text-align: center;
+      }
+
+      h1 {
+        font-size: 3rem;
+        color: #fff;
+        margin-bottom: 20px;
+        font-weight: 600;
+      }
+
+      .welcome-container {
+        background-color: #222;
+        padding: 50px 30px;
+        border-radius: 20px;
+        box-shadow: 0 5px 20px rgba(0, 0, 0, 0.3);
+      }
+
+      p {
+        font-size: 1.2rem;
+        color: #bbb;
+        margin-bottom: 30px;
+      }
+
+      a {
+        color: #fff;
+        text-decoration: none;
+        background-color: #333;
+        padding: 15px 30px;
+        border-radius: 5px;
+        font-size: 1.2rem;
+        font-weight: bold;
+        transition: background-color 0.3s ease;
+      }
+
+      a:hover {
+        background-color: #555;
+      }
+
+      #login-modal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.7);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
+
+      .modal-content {
+        background-color: #333;
+        padding: 20px;
+        border-radius: 10px;
+        width: 600px;
+        text-align: center;
+        display: flex;
+        justify-content: space-around;
+      }
+
+      input {
+        padding: 10px;
+        margin: 10px;
+        width: 80%;
+        border-radius: 5px;
+      }
+
+      button {
+        padding: 10px 20px;
+        background-color: #444;
+        color: white;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+      }
+
+      button:hover {
+        background-color: #555;
+      }
+
+      .toggle-link {
+        color: #bbb;
+        text-decoration: none;
+      }
+
+      .toggle-link:hover {
+        color: white;
+      }
+
+      .form-container {
+        width: 45%;
+        text-align: left;
+      }
+
+      h2 {
+        font-size: 1.5rem;
+        margin-bottom: 20px;
+      }
+
+      .form-container p {
+        font-size: 1rem;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Login/Signup Modal -->
+    <div id="login-modal">
+      <div class="modal-content">
+        <!-- Login Form -->
+        <div class="form-container" id="login-form-container">
+          <h2>Login</h2>
+          <form id="login-form">
+            <input type="email" id="login-email" placeholder="Enter email" required /><br />
+            <input type="password" id="login-password" placeholder="Enter password" required /><br />
+            <button type="submit">Login</button>
+          </form>
+          <p>
+            Don't have an account?<br><br> <a href="#" id="toggle-to-signup" class="toggle-link">Sign Up</a>
+          </p>
+        </div>
+
+        <!-- Sign Up Form -->
+        <div class="form-container" id="signup-form-container" style="display: none;">
+          <h2>Sign Up</h2>
+          <form id="signup-form">
+            <input type="email" id="signup-email" placeholder="Enter email" required /><br />
+            <input type="password" id="signup-password" placeholder="Enter password" required /><br />
+            <button type="submit">Sign Up</button>
+          </form>
+          <p>
+            Already have an account?<br><br> <a href="#" id="toggle-to-login" class="toggle-link">Login</a>
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Content -->
+    <div id="mainContent" class="welcome-container" style="display: none;">
+      <h1>Welcome to the Social Media App</h1>
+      <p>Discover, share, and connect with others through posts and updates.</p>
+      <p>Track your screen time here.</p>
+      <div id="timeSpent">Time Spent: 0 seconds</div><br><br>
+
+      <script src="screenTime.js"></script><br><br>
+
+      <a href="/dashboard">Go to Dashboard</a><br /><br /><br />
+      <a href="/profiles">Profile</a><br><br>
+
+      <button onclick="window.location.href='/focusMode';">Go to Focus Mode</button>
+      <a href="/mood-board" style="display: block; margin-top: 20px; background-color: #444; padding: 15px 30px; border-radius: 5px; text-decoration: none; color: white; font-weight: bold; font-size: 1.2rem;">View Mood Board</a>
+
+      <!-- Logout Button -->
+      <button id="logoutBtn" style="margin-top: 20px;">Logout</button>
+    </div>
+
+    <script>
+      // Function to check if the user is authenticated
+      function checkAuthentication() {
+        const isAuthenticated = localStorage.getItem("isAuthenticated");
+        const loginModal = document.getElementById("login-modal");
+        const mainContent = document.getElementById("mainContent");
+
+        if (isAuthenticated === "true") {
+          loginModal.style.display = "none";
+          mainContent.style.display = "block";
+        } else {
+          loginModal.style.display = "flex";
+          mainContent.style.display = "none";
+        }
+      }
+
+      // Toggle between Login and Signup forms
+      document.getElementById("toggle-to-signup").addEventListener("click", function (e) {
+        e.preventDefault();
+        document.getElementById("login-form-container").style.display = "none";
+        document.getElementById("signup-form-container").style.display = "block";
+      });
+
+      document.getElementById("toggle-to-login").addEventListener("click", function (e) {
+        e.preventDefault();
+        document.getElementById("signup-form-container").style.display = "none";
+        document.getElementById("login-form-container").style.display = "block";
+      });
+
+      // Handle Sign Up form submission
+      document.getElementById("signup-form").addEventListener("submit", function (event) {
+        event.preventDefault();
+        const email = document.getElementById("signup-email").value;
+        const password = document.getElementById("signup-password").value;
+
+        if (email && password) {
+          // Store authentication status
+          localStorage.setItem("isAuthenticated", "true");
+
+          // Hide modal and show main content
+          checkAuthentication();
+        }
+      });
+
+      // Handle Login form submission
+      document.getElementById("login-form").addEventListener("submit", function (event) {
+        event.preventDefault();
+        const email = document.getElementById("login-email").value;
+        const password = document.getElementById("login-password").value;
+
+        if (email && password) {
+          // Store authentication status
+          localStorage.setItem("isAuthenticated", "true");
+
+          // Hide modal and show main content
+          checkAuthentication();
+        }
+      });
+
+      // Handle Logout functionality
+      document.getElementById("logoutBtn").addEventListener("click", function () {
+        localStorage.removeItem("isAuthenticated");
+        checkAuthentication();
+      });
+
+      // Check authentication on page load
+      checkAuthentication();
+    </script>
+  </body>
+</html>

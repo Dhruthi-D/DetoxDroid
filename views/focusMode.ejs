@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Focus Mode</title>
+</head>
+<body>
+    <h1>Focus Mode</h1>
+    
+    <p>Set your focus time (in minutes):</p>
+    <input 
+        type="number" 
+        id="focus-time" 
+        name="focusTime" 
+        value="<%= focusTime %>" 
+        min="0.5" 
+        max="120" 
+        required
+    >
+
+    <button onclick="startFocusMode()">Start Focus</button>
+    <button id="stop-focus-btn" onclick="stopFocusMode()" style="display: none;">Stop Focus</button>
+    
+    <p id="timer-display">Remaining Time: 00:00</p> <!-- Display remaining time -->
+
+    <script>
+        let timer;
+        let remainingTime;
+
+        // Function to start the focus timer
+        function startFocusMode() {
+            var time = document.getElementById('focus-time').value;
+            remainingTime = time * 60; // Convert minutes to seconds
+            document.getElementById('stop-focus-btn').style.display = 'inline'; // Show the stop button
+            updateTimerDisplay();
+
+            timer = setInterval(function() {
+                remainingTime--;
+                updateTimerDisplay();
+
+                if (remainingTime <= 0) {
+                    clearInterval(timer); // Stop the timer
+                    alert("Focus Mode ended. Click OK to return to Dashboard.");
+                    redirectToDashboard();
+                }
+            }, 1000); // Update every second
+        }
+
+        // Function to stop the focus mode
+        function stopFocusMode() {
+            clearInterval(timer); // Stop the timer
+            alert("Focus Mode stopped. Click OK to return.");
+            redirectToDashboard();
+        }
+
+        // Function to update the timer display
+        function updateTimerDisplay() {
+            var minutes = Math.floor(remainingTime / 60);
+            var seconds = remainingTime % 60;
+
+            // Format minutes and seconds to two digits
+            minutes = minutes < 10 ? "0" + minutes : minutes;
+            seconds = seconds < 10 ? "0" + seconds : seconds;
+
+            document.getElementById('timer-display').textContent = "Remaining Time: " + minutes + ":" + seconds;
+        }
+
+        // Function to redirect to the dashboard
+        function redirectToDashboard() {
+            window.location.href = '/'; // Redirect to the dashboard page
+        }
+    </script>
+</body>
+</html>
