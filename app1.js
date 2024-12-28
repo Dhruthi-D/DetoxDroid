@@ -104,11 +104,9 @@ let profiles = [];
 let postIdCounter = 1;
 
 // Firebase functions
-function pushToFirebase(req) {
-    const userId = req.session.uid; // Get the current user's ID
-    // Push posts and profiles to Firebase under the user's node
-    db.ref(`users/${userId}/posts`).set(posts);
-    db.ref(`users/${userId}/profiles`).set(profiles);
+function pushToFirebase() {
+    db.ref('posts').set(posts);
+    db.ref('profiles').set(profiles);
 }
 
 // Data loading functions
@@ -163,15 +161,14 @@ app.get('/', (req, res) => {
                 { name: 'Focus Mode', url: '/focusMode' },
                 { name: 'Mood Board', url: '/mood-board' },
                 { name: 'Profiles', url: '/profiles' },
-                { name: 'Explore', url: '/explore' },
-                { name: 'Users of App', url: '/users-of-app' }
+                { name: 'Explore', url: '/explore' }, // Add Explore page link
+                { name: 'Users of App', url: '/users-of-app' } // Add Users of App link
             ]
         });
     } else {
         res.render('index', { error: null });
     }
 });
-
 
 // Update Screen Time Endpoint
 app.post('/update-screen-time', checkAuth, (req, res) => {
@@ -231,6 +228,7 @@ app.post("/delete-post", checkAuth, (req, res) => {
 app.get('/login', (req, res) => {
     res.render('index', { error: null });
 });
+
 app.post('/login', async (req, res) => {
     const { email } = req.body;
     
@@ -238,24 +236,6 @@ app.post('/login', async (req, res) => {
         const userRecord = await admin.auth().getUserByEmail(email);
         req.session.uid = userRecord.uid;
         req.session.email = userRecord.email;
-
-        // Verify user profile exists
-        const hasProfile = await verifyUserData(userRecord.uid);
-        if (!hasProfile) {
-            // Create profile if it doesn't exist
-            const initialProfile = {
-                name: email.split('@')[0],
-                email: email,
-                bio: '',
-                profilePic: null,
-                followers: [],
-                following: [],
-                createdAt: admin.database.ServerValue.TIMESTAMP
-            };
-            await db.ref(`users/${userRecord.uid}/profile`).set(initialProfile);
-            console.log(`Created missing profile for user: ${userRecord.uid}`);
-        }
-
         await loadUserData(req.session.uid);
         res.redirect('/');
     } catch (error) {
@@ -267,26 +247,22 @@ app.post('/login', async (req, res) => {
         }
     }
 });
-
 async function loadUserData(userId) {
     const userPostsRef = db.ref(`users/${userId}/posts`);
-    const userProfileRef = db.ref(`users/${userId}/profile`); // Fetch profile instead of profiles
+    const userProfilesRef = db.ref(`users/${userId}/profiles`);
 
     const postsSnapshot = await userPostsRef.once('value');
-    const profileSnapshot = await userProfileRef.once('value');
+    const profilesSnapshot = await userProfilesRef.once('value');
 
     postsSnapshot.forEach(post => {
         posts.push(post.val());
     });
 
-    // Load profile
-    const profileData = profileSnapshot.val();
-    if (profileData) {
-        profiles.push(profileData); // Add to profiles array if needed
-    }
+    profilesSnapshot.forEach(profile => {
+        profiles.push(profile.val());
+    });
 }
-
-function pushToFirebase(req) {
+function pushToFirebase() {
     const userId = req.session.uid; // Get the current user's ID
 
     // Push posts and profiles to Firebase under the user's node
@@ -297,55 +273,34 @@ function pushToFirebase(req) {
 
 app.post("/signup", async (req, res) => {
     const { email, password } = req.body;
+
     try {
-        const userRecord = await admin.auth().createUser({ email, password });
-        const initialProfile = {
-            name: email.split('@')[0],
-            email: email,
-            bio: '',
-            profilePic: null,
-            followers: [],
-            following: [],
-            createdAt: admin.database.ServerValue.TIMESTAMP
-        };
-        await db.ref(`users/${userRecord.uid}/profile`).set(initialProfile);
-        console.log(`Profile created for user: ${userRecord.uid}`);
+        const userRecord = await admin.auth().createUser({
+            email,
+            password,
+            emailVerified: false
+        });
+        console.log(`User created successfully: ${userRecord.uid}`);
         res.redirect("/login");
     } catch (error) {
-        console.error("Error in signup process:", error);
-        res.render('index', { error: 'Error creating user' });
+        console.error("Error creating new user:", error);
+        res.render('index', { 
+            error: error.code === 'auth/email-already-exists' 
+                ? 'Email already exists' 
+                : 'Error creating user'
+        });
     }
 });
 
-async function verifyUserData(userId) {
-    try {
-        const userRef = db.ref(`users/${userId}`);
-        const snapshot = await userRef.once('value');
-        console.log(`Verifying data for user ${userId}:`, snapshot.val());
-        return snapshot.exists();
-    } catch (error) {
-        console.error(`Error verifying user data for ${userId}:`, error);
-        return false;
-    }
-}
 app.get('/logout', (req, res) => {
     req.session.destroy();
     res.redirect('/');
 });
 
-app.get("/dashboard", checkAuth, async (req, res) => {
-    const userId = req.session.uid;
-    const userPostsRef = db.ref(`users/${userId}/posts`);
-    const postsSnapshot = await userPostsRef.once('value');
-    
-    const userPosts = [];
-    postsSnapshot.forEach(post => {
-        userPosts.push(post.val());
-    });
-
-    res.render("dashboard", { posts: userPosts, user: req.session });
+// Protected routes
+app.get("/dashboard", checkAuth, (req, res) => {
+    res.render("dashboard", { posts, user: req.session });
 });
-
 
 app.get("/focusMode", checkAuth, (req, res) => {
     res.render("focusMode", { focusTime: 1, user: req.session });
@@ -368,18 +323,11 @@ try {
 
 
 app.get("/mood-board", checkAuth, async (req, res) => {
-    const userId = req.session.uid;
     const moodData = [];
-    
-    // Fetch user's posts
-    const userPostsRef = db.ref(`users/${userId}/posts`);
-    const postsSnapshot = await userPostsRef.once('value');
-
     let negativeCount = 0;
 
-    postsSnapshot.forEach(post => {
-        const postData = post.val();
-        const pythonProcess = spawnSync('python', ['analyze_sentiment.py', postData.content]);
+    for (const post of posts) {
+        const pythonProcess = spawnSync('python', ['analyze_sentiment.py', post.content]);
         const output = pythonProcess.stdout.toString();
 
         if (!output) {
@@ -390,11 +338,12 @@ app.get("/mood-board", checkAuth, async (req, res) => {
         try {
             const sentiment = JSON.parse(output);
             moodData.push({
-                title: postData.title,
+                title: post.title,
                 mood: sentiment.polarity > 0 ? "Positive" : sentiment.polarity < 0 ? "Negative" : "Neutral",
                 polarity: sentiment.polarity,
                 subjectivity: sentiment.subjectivity,
             });
+
             if (sentiment.polarity < 0) {
                 negativeCount++;
             }
@@ -402,20 +351,19 @@ app.get("/mood-board", checkAuth, async (req, res) => {
             console.error("Error parsing JSON:", error);
             return res.status(500).json({ error: "Error parsing sentiment data" });
         }
-    });
-
-    res.render("mood-board", { moodData, negativeCount });
-});
-
+    }
 
     // Check user screen time
-    //const userId = req.session.uid;
-    //const totalMinutes = screenTime[userId]?.totalMinutes || 0;
+    const userId = req.session.uid;
+    const totalMinutes = screenTime[userId]?.totalMinutes || 0;
 
     // Prompt logic
-    //const promptBreak = totalMinutes > 60 || negativeCount > 0; // Example thresholds
-    
+    const promptBreak = totalMinutes > 60 || negativeCount > 0; // Example thresholds
+    res.render('mood-board', { moodData, user: req.session, promptBreak });
 
+    // Push mood board data to Firebase
+    pushMoodBoardToFirebase(moodData);
+});
 
 // Function to push mood board data to Firebase
 function pushMoodBoardToFirebase(moodData) {
@@ -424,29 +372,25 @@ function pushMoodBoardToFirebase(moodData) {
 
 
 // Post routes
-app.post("/add-post", uploadPostImage.single("image"), checkAuth, (req, res) => {
-    const { title, content, category } = req.body; // Ensure 'category' is included here
+app.post("/add-post", checkAuth, uploadPostImage.single("image"), (req, res) => {
+    const { title, content, category } = req.body; // Include category in the request
     const image = req.file ? `/uploads/${req.file.filename}` : null;
-
     const newPost = {
+        id: postIdCounter++,
         title,
         content,
         image,
-        category,
-        createdAt: Date.now(),
-        userId: req.session.uid,
-        dislikeReasons: [], // Initialize this field
+        comments: [],
         likes: 0,
         dislikes: 0,
-        comments: []
+        dislikeReasons: [],
+        userId: req.session.uid,
+        category // Add category to the post
     };
-
-    posts.push(newPost); // Add post to local array
-    pushToFirebase(req); // Save to Firebase
+    posts.push(newPost);
+    savePosts(); // Ensure to save the posts after adding
     res.redirect("/dashboard");
 });
-
-
 app.get('/posts/:category', (req, res) => {
     const { category } = req.params;
     const filteredPosts = posts.filter(post => post.category === category);
@@ -465,22 +409,41 @@ app.get('/posts/:category', (req, res) => {
         user: req.session 
     });
 });
+
 
 app.post("/add-comment", checkAuth, (req, res) => {
-    const { postId, comment } = req.body; // Get postId and comment text from request body
+    const { postId, comment } = req.body;
     const userId = req.session.uid;
-
-    // Find the post by ID
-    const post = posts.find(p => p.id === parseInt(postId));
+    
+    const post = posts.find(post => post.id === parseInt(postId));
     if (post) {
-        // Add the new comment
-        post.comments.push({ text: comment, userId }); // Assuming you want to store user ID too
-        savePosts(); // Save updated posts array to file or database
+        const newComment = {
+            text: comment,
+            userId: userId,
+            timestamp: Date.now()
+        };
+        
+        // Add to local array
+        if (!post.comments) {
+            post.comments = [];
+        }
+        post.comments.push(newComment);
+        
+        // Add to Firebase
+        db.ref(`users/${post.userId}/posts`)
+            .orderByChild('id')
+            .equalTo(parseInt(postId))
+            .once('value')
+            .then((snapshot) => {
+                snapshot.forEach((child) => {
+                    child.ref.child('comments').push(newComment);
+                });
+            });
+        
+        savePosts();
     }
-
     res.redirect("/dashboard");
 });
-
 
 
 app.post("/like-post", checkAuth, (req, res) => {
@@ -564,102 +527,46 @@ app.get("/create-profile", checkAuth, (req, res) => {
     res.render("createProfile", { user: req.session });
 });
 
-app.post("/create-profile", checkAuth, uploadProfilePic.single("profilePic"), async (req, res) => {
-    try {
-        const { name, email, bio } = req.body;
-        const userId = req.session.uid;
-        const profilePic = req.file ? `/profilePics/${req.file.filename}` : null;
-        
-        const profileData = {
-            name,
-            email,
-            bio: bio || "",
-            profilePic,
-            followers: [],
-            following: [],
-            createdAt: admin.database.ServerValue.TIMESTAMP
-        };
-        
-        await db.ref(`users/${userId}/profile`).set(profileData);
-        
-        res.redirect("/profiles");
-    } catch (error) {
-        console.error('Error creating profile:', error);
-        res.status(500).send('Error creating profile');
-    }
-})
-
-
-app.post('/follow/:userId', checkAuth, async (req, res) => {
-    try {
-        const currentUserId = req.session.uid;
-        const targetUserId = req.params.userId;
-        
-        // Get both user profiles
-        const currentUserRef = db.ref(`users/${currentUserId}/profile`);
-        const targetUserRef = db.ref(`users/${targetUserId}/profile`);
-        
-        // Update following for current user
-        await currentUserRef.child('following').transaction(following => {
-            following = following || [];
-            if (!following.includes(targetUserId)) {
-                following.push(targetUserId);
-            }
-            return following;
-        });
-        
-        // Update followers for target user
-        await targetUserRef.child('followers').transaction(followers => {
-            followers = followers || [];
-            if (!followers.includes(currentUserId)) {
-                followers.push(currentUserId);
-            }
-            return followers;
-        });
-        
-        res.redirect('/users-of-app');
-    } catch (error) {
-        console.error('Error following user:', error);
-        res.redirect('/users-of-app?error=Failed to follow user');
-    }
+app.post("/create-profile", checkAuth, uploadProfilePic.single("profilePic"), (req, res) => {
+    const { name, email, bio } = req.body;
+    const profilePic = req.file ? `/profilePics/${req.file.filename}` : null;
+    const newProfile = {
+        id: profiles.length + 1,
+        name,
+        email,
+        bio: bio || "",
+        profilePic,
+        userId: req.session.uid,
+        followers: [] // Initialize followers array
+    };
+    profiles.push(newProfile);
+    saveProfiles();
+    pushToFirebase();
+    res.redirect("/profiles");
 });
 
-// Unfollow user route
-app.post('/unfollow/:userId', checkAuth, async (req, res) => {
-    try {
-        const currentUserId = req.session.uid;
-        const targetUserId = req.params.userId;
-        
-        // Get both user profiles
-        const currentUserRef = db.ref(`users/${currentUserId}/profile`);
-        const targetUserRef = db.ref(`users/${targetUserId}/profile`);
-        
-        // Remove from following list
-        await currentUserRef.child('following').transaction(following => {
-            following = following || [];
-            const index = following.indexOf(targetUserId);
-            if (index > -1) {
-                following.splice(index, 1);
-            }
-            return following;
-        });
-        
-        // Remove from followers list
-        await targetUserRef.child('followers').transaction(followers => {
-            followers = followers || [];
-            const index = followers.indexOf(currentUserId);
-            if (index > -1) {
-                followers.splice(index, 1);
-            }
-            return followers;
-        });
-        
-        res.redirect('/users-of-app');
-    } catch (error) {
-        console.error('Error unfollowing user:', error);
-        res.redirect('/users-of-app?error=Failed to unfollow user');
+
+app.post("/follow/:id", checkAuth, (req, res) => {
+    const profile = profiles.find(p => p.id === parseInt(req.params.id));
+    if (profile && !profile.followers.includes(req.session.uid)) {
+        profile.followers.push(req.session.uid); // Add user ID to followers
+        saveProfiles(); // Save updated profiles
     }
+    res.redirect("/profiles");
 });
+
+app.post("/unfollow/:id", checkAuth, (req, res) => {
+    const profile = profiles.find(p => p.id === parseInt(req.params.id));
+    if (profile) {
+        const index = profile.followers.indexOf(req.session.uid);
+        if (index !== -1) {
+            profile.followers.splice(index, 1); // Remove user ID from followers
+            saveProfiles(); // Save updated profiles
+        }
+    }
+    res.redirect("/profiles");
+});
+
 //const path = require('path');
 
 // Load local posts from JSON file
@@ -669,17 +576,8 @@ const axios = require('axios');
 const SUBREDDIT_MAPPING = {
     technology: 'technology',
     education: 'education',
-    sports: 'sports',
-    health: 'health',
-    entertainment: 'entertainment'
+    sports: 'sports'
 };
-
-app.get('/posts/:category', async (req, res) => {
-    const { category } = req.params;
-    const filteredPosts = await getRedditPosts(category); // Fetch posts from Reddit
-    res.render('postsByCategory', { posts: filteredPosts, user: req.session });
-});
-
 
 // Function to fetch posts from Reddit
 async function getRedditPosts(category) {
@@ -801,82 +699,19 @@ app.get('/explore', checkAuth, async (req, res) => {
         res.status(500).send('Error loading content');
     }
 });
-const getUserProfile = async (userId) => {
-    try {
-        const snapshot = await db.ref(`users/${userId}/profile`).once('value');
-        return snapshot.val();
-    } catch (error) {
-        console.error('Error fetching user profile:', error);
-        return null;
-    }
-};
-// Function to update user profile in Firebase
-async function updateUserProfile(userId, profileData) {
-    try {
-        await db.ref(`users/${userId}/profile`).update(profileData);
-        return true;
-    } catch (error) {
-        console.error('Error updating user profile:', error);
-        return false;
-    }
-}
 
-// Function to get all active users
-const getAllProfiles = async () => {
-    try {
-        const snapshot = await db.ref('users').once('value');
+
+app.get('/users-of-app', checkAuth, (req, res) => {
+    const usersRef = db.ref('users'); // Reference to users in Firebase
+    usersRef.once('value').then(snapshot => {
         const users = [];
-        
-        snapshot.forEach((childSnapshot) => {
-            const userId = childSnapshot.key;
+        snapshot.forEach(childSnapshot => {
             const userData = childSnapshot.val();
-            
-            if (userData && userData.profile) {
-                users.push({
-                    id: userId,
-                    ...userData.profile,
-                    followers: userData.profile.followers || [],
-                    following: userData.profile.following || []
-                });
-            }
+            users.push(userData);
         });
-        
-        return users;
-    } catch (error) {
-        console.error('Error fetching all profiles:', error);
-        return [];
-    }
-};
-
-// Updated users of app route with better error handling
-app.get('/users-of-app', checkAuth, async (req, res) => {
-    try {
-        // Get current user's ID from session
-        const currentUserId = req.session.uid;
-        
-        // Verify current user exists
-        const currentUser = await getUserProfile(currentUserId);
-        if (!currentUser) {
-            throw new Error('Current user profile not found');
-        }
-        
-        // Get all users
-        const allUsers = await getAllProfiles();
-        
-        // Filter out current user and format data
-        const users = allUsers
-            .filter(user => user.id !== currentUserId)
-            .map(user => ({
-                ...user,
-                followers: user.followers || [],
-                following: user.following || []
-            }));
-
-        res.render('usersOfApp', {
-            users,
-            currentUserId,
+        res.render('usersOfApp', { 
+            users, 
             user: req.session,
-            error: null,
             pages: [
                 { name: 'Dashboard', url: '/dashboard' },
                 { name: 'Focus Mode', url: '/focusMode' },
@@ -886,24 +721,13 @@ app.get('/users-of-app', checkAuth, async (req, res) => {
                 { name: 'Users of App', url: '/users-of-app' }
             ]
         });
-    } catch (error) {
-        console.error('Error in users-of-app route:', error);
-        res.render('usersOfApp', {
-            users: [],
-            currentUserId: req.session.uid,
-            user: req.session,
-            error: 'Unable to load users. Please try again later.',
-            pages: [
-                { name: 'Dashboard', url: '/dashboard' },
-                { name: 'Focus Mode', url: '/focusMode' },
-                { name: 'Mood Board', url: '/mood-board' },
-                { name: 'Profiles', url: '/profiles' },
-                { name: 'Explore', url: '/explore' },
-                { name: 'Users of App', url: '/users-of-app' }
-            ]
-        });
-    }
+    }).catch(err => {
+        console.error("Error fetching users:", err);
+        res.status(500).send("Error loading users.");
+    });
 });
+
+
 // Start server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {

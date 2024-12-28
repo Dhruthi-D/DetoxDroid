@@ -99,7 +99,8 @@
         <p>Email: <%= profile.email %></p>
         <p>Bio: <%= profile.bio || 'No biography available' %></p>
 
-        <p>Followers: <%= profile.followers.length %></p>
+        <p>Followers: <%= profile.followers ? profile.followers.length : 0 %></p>
+
         <form action="/follow/<%= profile.id %>" method="POST" style="display: inline;">
           <input type="hidden" name="followerId" value="1"> <!-- Replace 1 with the current user's ID -->
           <button type="submit">Follow</button>

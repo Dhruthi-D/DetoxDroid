@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DetoxDroid</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100">
+    <nav class="bg-white shadow-lg mb-8">
+        <div class="max-w-6xl mx-auto px-4">
+            <div class="flex justify-between">
+                <div class="flex space-x-7">
+                    <div class="py-4">
+                        <a href="/" class="text-xl font-semibold">DetoxDroid</a>
+                    </div>
+                    <div class="hidden md:flex items-center space-x-4">
+                        <% if (pages) { %>
+                            <% pages.forEach(function(page) { %>
+                                <a href="<%= page.url %>" class="py-4 px-2 hover:text-blue-500"><%= page.name %></a>
+                            <% }); %>
+                        <% } %>
+                    </div>
+                </div>
+                <% if (user) { %>
+                    <div class="flex items-center space-x-4">
+                        <span class="text-gray-600"><%= user.email %></span>
+                        <a href="/logout" class="py-2 px-4 bg-red-500 text-white rounded hover:bg-red-600">Logout</a>
+                    </div>
+                <% } %>
+            </div>
+        </div>
+    </nav>
