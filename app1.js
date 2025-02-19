@@ -11,6 +11,7 @@ const admin = require("firebase-admin");
 const serviceAccount = require("./firebase_cred.json");
 
 
+
 // Initialize Firebase Admin
 admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
@@ -31,6 +32,8 @@ function loadScreenTime() {
         screenTime = {};
     }
 }
+
+
 
 // Save screen time data
 function saveScreenTime() {
@@ -104,9 +107,11 @@ let profiles = [];
 let postIdCounter = 1;
 
 // Firebase functions
-function pushToFirebase() {
-    db.ref('posts').set(posts);
-    db.ref('profiles').set(profiles);
+function pushToFirebase(req) {
+    const userId = req.session.uid; // Get the current user's ID
+    // Push posts and profiles to Firebase under the user's node
+    db.ref(`users/${userId}/posts`).set(posts);
+    db.ref(`users/${userId}/profiles`).set(profiles);
 }
 
 // Data loading functions
@@ -161,8 +166,8 @@ app.get('/', (req, res) => {
                 { name: 'Focus Mode', url: '/focusMode' },
                 { name: 'Mood Board', url: '/mood-board' },
                 { name: 'Profiles', url: '/profiles' },
-                { name: 'Explore', url: '/explore' }, // Add Explore page link
-                { name: 'Users of App', url: '/users-of-app' } // Add Users of App link
+                { name: 'Explore', url: '/explore' },
+                { name: 'Users of App', url: '/users-of-app' }
             ]
         });
     } else {
@@ -170,65 +175,70 @@ app.get('/', (req, res) => {
     }
 });
 
+
 // Update Screen Time Endpoint
-app.post('/update-screen-time', checkAuth, (req, res) => {
+app.post('/api/screen-time/update', checkAuth, (req, res) => {
     const userId = req.session.uid;
-    updateScreenTime(userId);
+    if (!screenTime[userId]) {
+        screenTime[userId] = { totalSeconds: 0 };
+    }
+    screenTime[userId].totalSeconds += 1;
+    saveScreenTime();
     res.sendStatus(200);
 });
+
 // Reset Screen Time Endpoint
-app.post('/reset-screen-time', checkAuth, (req, res) => {
+app.post('/api/screen-time/reset', checkAuth, (req, res) => {
     const userId = req.session.uid;
     if (screenTime[userId]) {
-        screenTime[userId].totalSeconds = 0; // Reset total minutes
-        saveScreenTime(); // Save updated screen time
+        screenTime[userId].totalSeconds = 0;
+        saveScreenTime();
     }
     res.sendStatus(200);
 });
 
-app.post("/delete-post", checkAuth, (req, res) => {
+app.post("/delete-post", checkAuth, async (req, res) => {
     const { postId } = req.body;
     const userId = req.session.uid;
-    
-    // Find post index
-    const postIndex = posts.findIndex(post => 
-        post.id === parseInt(postId) && post.userId === userId
-    );
-    
-    if (postIndex !== -1) {
-        // Remove from local array
-        const deletedPost = posts.splice(postIndex, 1)[0];
-        
-        // Remove from Firebase
-        db.ref(`users/${userId}/posts`)
-            .orderByChild('id')
-            .equalTo(parseInt(postId))
-            .once('value')
-            .then((snapshot) => {
-                snapshot.forEach((child) => {
-                    child.ref.remove();
-                });
-            });
-        
-        // Delete associated image if exists
-        if (deletedPost.image) {
-            const imagePath = path.join(__dirname, 'public', deletedPost.image);
-            fs.unlink(imagePath, (err) => {
-                if (err) console.error("Error deleting image:", err);
-            });
+
+    try {
+        const postRef = db.ref(`users/${userId}/posts/${postId}`);
+        const snapshot = await postRef.once('value');
+        const post = snapshot.val();
+
+        if (!post) {
+            return res.status(404).send("Post not found");
         }
-        
-        savePosts();
+
+        // Delete the image if it exists
+        if (post.image) {
+            const imagePath = path.join(__dirname, 'public', post.image);
+            try {
+                fs.unlinkSync(imagePath);
+            } catch (err) {
+                console.error("Error deleting image:", err);
+            }
+        }
+
+        // Delete the post
+        await postRef.remove();
+        res.redirect("/dashboard");
+    } catch (error) {
+        console.error("Error deleting post:", error);
+        res.status(500).send("Error deleting post");
     }
-    
-    res.redirect("/dashboard");
 });
 
 
+// Get current screen time for logged-in user
+app.get('/api/screen-time/current', checkAuth, (req, res) => {
+    const userId = req.session.uid;
+    const totalSeconds = screenTime[userId]?.totalSeconds || 0;
+    res.json({ totalSeconds });
+});
 app.get('/login', (req, res) => {
     res.render('index', { error: null });
 });
-
 app.post('/login', async (req, res) => {
     const { email } = req.body;
     
@@ -236,6 +246,24 @@ app.post('/login', async (req, res) => {
         const userRecord = await admin.auth().getUserByEmail(email);
         req.session.uid = userRecord.uid;
         req.session.email = userRecord.email;
+
+        // Verify user profile exists
+        const hasProfile = await verifyUserData(userRecord.uid);
+        if (!hasProfile) {
+            // Create profile if it doesn't exist
+            const initialProfile = {
+                name: email.split('@')[0],
+                email: email,
+                bio: '',
+                profilePic: null,
+                followers: [],
+                following: [],
+                createdAt: admin.database.ServerValue.TIMESTAMP
+            };
+            await db.ref(`users/${userRecord.uid}/profile`).set(initialProfile);
+            console.log(`Created missing profile for user: ${userRecord.uid}`);
+        }
+
         await loadUserData(req.session.uid);
         res.redirect('/');
     } catch (error) {
@@ -247,22 +275,105 @@ app.post('/login', async (req, res) => {
         }
     }
 });
+app.get("/edit-profile", checkAuth, async (req, res) => {
+    try {
+        const userId = req.session.uid;
+        const userRef = db.ref(`users/${userId}/profile`);
+        const snapshot = await userRef.once('value');
+        const profile = snapshot.val();
+
+        if (!profile) {
+            return res.status(404).send("Profile not found");
+        }
+
+        res.render("editProfile", { 
+            profile,
+            user: req.session,
+            error: null 
+        });
+    } catch (error) {
+        console.error("Error fetching profile:", error);
+        res.status(500).send("Error loading profile");
+    }
+});
+app.post("/update-profile", checkAuth, uploadProfilePic.single("profilePic"), async (req, res) => {
+    const { name, email, bio } = req.body;
+    const userId = req.session.uid;
+
+    // Check if a file was uploaded
+    let profilePic = null;
+    if (req.file) {
+        profilePic = `/profilePics/${req.file.filename}`; // Set profilePic if a file was uploaded
+    }
+
+    try {
+        // Fetch existing profile from Firebase
+        const profileSnapshot = await db.ref(`users/${userId}/profile`).once('value');
+        const existingProfile = profileSnapshot.val();
+
+        if (existingProfile) {
+            // Create an object to hold the updated fields
+            const updatedProfile = {};
+
+            // Check for changes and update only if necessary
+            if (existingProfile.name !== name) {
+                updatedProfile.name = name;
+            }
+            if (existingProfile.email !== email) {
+                updatedProfile.email = email;
+            }
+            if (existingProfile.bio !== bio) {
+                updatedProfile.bio = bio;
+            }
+            // Only update profilePic if a new one was uploaded
+            if (profilePic !== null && existingProfile.profilePic !== profilePic) {
+                updatedProfile.profilePic = profilePic;
+            }
+
+            // If there are any updates to apply, save them to Firebase
+            if (Object.keys(updatedProfile).length > 0) {
+                await db.ref(`users/${userId}/profile`).update(updatedProfile);
+                console.log("Profile updated successfully:", updatedProfile);
+            } else {
+                console.log("No changes detected in profile.");
+            }
+
+            // Reload user data from Firebase to ensure local state is up-to-date
+            await loadUserData(userId);
+
+            res.redirect("/profiles");
+        } else {
+            res.status(404).send("Profile not found");
+        }
+    } catch (error) {
+        console.error("Error updating profile:", error);
+        res.status(500).send("Failed to update profile");
+    }
+});
+
+
+
+
+
 async function loadUserData(userId) {
     const userPostsRef = db.ref(`users/${userId}/posts`);
-    const userProfilesRef = db.ref(`users/${userId}/profiles`);
+    const userProfileRef = db.ref(`users/${userId}/profile`); // Fetch profile instead of profiles
 
     const postsSnapshot = await userPostsRef.once('value');
-    const profilesSnapshot = await userProfilesRef.once('value');
+    const profileSnapshot = await userProfileRef.once('value');
 
     postsSnapshot.forEach(post => {
         posts.push(post.val());
     });
 
-    profilesSnapshot.forEach(profile => {
-        profiles.push(profile.val());
-    });
+    // Load profile
+    const profileData = profileSnapshot.val();
+    if (profileData) {
+        profiles.push(profileData); // Add to profiles array if needed
+    }
 }
-function pushToFirebase() {
+
+function pushToFirebase(req) {
     const userId = req.session.uid; // Get the current user's ID
 
     // Push posts and profiles to Firebase under the user's node
@@ -273,34 +384,88 @@ function pushToFirebase() {
 
 app.post("/signup", async (req, res) => {
     const { email, password } = req.body;
-
     try {
-        const userRecord = await admin.auth().createUser({
-            email,
-            password,
-            emailVerified: false
-        });
-        console.log(`User created successfully: ${userRecord.uid}`);
+        const userRecord = await admin.auth().createUser({ email, password });
+        const initialProfile = {
+            name: email.split('@')[0],
+            email: email,
+            bio: '',
+            profilePic: null,
+            followers: [],
+            following: [],
+            createdAt: admin.database.ServerValue.TIMESTAMP
+        };
+        await db.ref(`users/${userRecord.uid}/profile`).set(initialProfile);
+        console.log(`Profile created for user: ${userRecord.uid}`);
         res.redirect("/login");
     } catch (error) {
-        console.error("Error creating new user:", error);
-        res.render('index', { 
-            error: error.code === 'auth/email-already-exists' 
-                ? 'Email already exists' 
-                : 'Error creating user'
-        });
+        console.error("Error in signup process:", error);
+        res.render('index', { error: 'Error creating user' });
     }
 });
 
+async function verifyUserData(userId) {
+    try {
+        const userRef = db.ref(`users/${userId}`);
+        const snapshot = await userRef.once('value');
+        console.log(`Verifying data for user ${userId}:`, snapshot.val());
+        return snapshot.exists();
+    } catch (error) {
+        console.error(`Error verifying user data for ${userId}:`, error);
+        return false;
+    }
+}
 app.get('/logout', (req, res) => {
     req.session.destroy();
     res.redirect('/');
 });
-
-// Protected routes
-app.get("/dashboard", checkAuth, (req, res) => {
-    res.render("dashboard", { posts, user: req.session });
+app.post('/logout', (req, res) => {
+    req.session.destroy(err => {
+        if (err) {
+            return res.status(500).send('Logout failed');
+        }
+        res.clearCookie('connect.sid'); // Clear cookie if using sessions
+        res.sendStatus(200); // Send success response
+    });
 });
+
+
+app.get("/dashboard", checkAuth, async (req, res) => {
+    try {
+        const userId = req.session.uid;
+        const userPostsRef = db.ref(`users/${userId}/posts`);
+        const snapshot = await userPostsRef.once('value');
+        
+        const posts = [];
+        snapshot.forEach(childSnapshot => {
+            const post = childSnapshot.val();
+            if (post && post.title) { // Basic validation
+                posts.push({
+                    id: childSnapshot.key,
+                    ...post,
+                    likes: post.likes || 0,
+                    dislikes: post.dislikes || 0,
+                    comments: post.comments || [],
+                    dislikeReasons: post.dislikeReasons || []
+                });
+            }
+        });
+        
+        // Sort posts by creation date (newest first)
+        const sortedPosts = posts.sort((a, b) => {
+            return (b.createdAt || 0) - (a.createdAt || 0);
+        });
+
+        res.render("dashboard", { 
+            posts: sortedPosts,
+            user: req.session 
+        });
+    } catch (error) {
+        console.error("Error fetching posts:", error);
+        res.status(500).send("Error loading dashboard");
+    }
+});
+
 
 app.get("/focusMode", checkAuth, (req, res) => {
     res.render("focusMode", { focusTime: 1, user: req.session });
@@ -321,49 +486,103 @@ try {
     return res.status(500).json({ error: "Error parsing sentiment data" });
 }
 
-
 app.get("/mood-board", checkAuth, async (req, res) => {
+    const userId = req.session.uid;
     const moodData = [];
     let negativeCount = 0;
+    
+    // Fetch user's posts and their comments
+    const userPostsRef = db.ref(`users/${userId}/posts`);
+    const postsSnapshot = await userPostsRef.once('value');
 
-    for (const post of posts) {
-        const pythonProcess = spawnSync('python', ['analyze_sentiment.py', post.content]);
-        const output = pythonProcess.stdout.toString();
+    // Fetch user's explore comments
+    const exploreCommentsRef = db.ref('comments');
+    const exploreCommentsSnapshot = await exploreCommentsRef.once('value');
+    const allExploreComments = exploreCommentsSnapshot.val() || {};
 
-        if (!output) {
-            console.error("Empty output from Python script");
-            return res.status(500).json({ error: "No data returned from sentiment analysis" });
-        }
-
-        try {
-            const sentiment = JSON.parse(output);
-            moodData.push({
-                title: post.title,
-                mood: sentiment.polarity > 0 ? "Positive" : sentiment.polarity < 0 ? "Negative" : "Neutral",
-                polarity: sentiment.polarity,
-                subjectivity: sentiment.subjectivity,
+    // Process posts
+    postsSnapshot.forEach(post => {
+        const postData = post.val();
+        analyzeContent(postData.content, postData.title, "Post", moodData);
+        
+        // Analyze post comments
+        if (postData.comments) {
+            postData.comments.forEach(comment => {
+                if (comment.userId === userId) {
+                    analyzeContent(comment.text, "Comment on: " + postData.title, "Comment", moodData);
+                }
             });
-
-            if (sentiment.polarity < 0) {
-                negativeCount++;
-            }
-        } catch (error) {
-            console.error("Error parsing JSON:", error);
-            return res.status(500).json({ error: "Error parsing sentiment data" });
         }
-    }
+    });
+
+    // Process explore comments
+    Object.entries(allExploreComments).forEach(([postId, comments]) => {
+        if (Array.isArray(comments)) {
+            comments.forEach(comment => {
+                if (comment.userId === userId) {
+                    analyzeContent(comment.text, "Explore Comment", "Explore Comment", moodData);
+                }
+            });
+        }
+    });
+
+    // Count negative entries
+    negativeCount = moodData.filter(item => item.polarity < 0).length;
 
     // Check user screen time
-    const userId = req.session.uid;
-    const totalMinutes = screenTime[userId]?.totalMinutes || 0;
+    const totalMinutes = screenTime[userId]?.totalSeconds / 60 || 0;
+
+    // Determine if a prompt should be shown
+    const promptBreak = totalMinutes > 60 || negativeCount > 3;
+
+    res.render("mood-board", { moodData, negativeCount, promptBreak });
+});
+
+function analyzeContent(content, title, type, moodData) {
+    if (!content) return;
+    
+    const pythonProcess = spawnSync('python', ['analyze_sentiment.py', content]);
+    const output = pythonProcess.stdout.toString();
+
+    if (!output) {
+        console.error("Empty output from Python script");
+        return;
+    }
+
+    try {
+        const sentiment = JSON.parse(output);
+        moodData.push({
+            title: `${type}: ${title}`,
+            mood: sentiment.polarity > 0 ? "Positive" : sentiment.polarity < 0 ? "Negative" : "Neutral",
+            polarity: sentiment.polarity,
+            subjectivity: sentiment.subjectivity,
+            type: type
+        });
+    } catch (error) {
+        console.error("Error parsing sentiment JSON:", error);
+    }
+}
+
+
+    // Check user screen time
+   /* const totalMinutes = screenTime[userId]?.totalMinutes || 0;
+
+     Determine if a prompt should be shown
+    const promptBreak = totalMinutes > 60 || negativeCount > 0; Example thresholds
+
+    res.render("mood-board", { moodData, negativeCount, promptBreak });*/
+
+
+
+
+    // Check user screen time
+    //const userId = req.session.uid;
+    //const totalMinutes = screenTime[userId]?.totalMinutes || 0;
 
     // Prompt logic
-    const promptBreak = totalMinutes > 60 || negativeCount > 0; // Example thresholds
-    res.render('mood-board', { moodData, user: req.session, promptBreak });
+    //const promptBreak = totalMinutes > 60 || negativeCount > 0; // Example thresholds
+    
 
-    // Push mood board data to Firebase
-    pushMoodBoardToFirebase(moodData);
-});
 
 // Function to push mood board data to Firebase
 function pushMoodBoardToFirebase(moodData) {
@@ -372,25 +591,33 @@ function pushMoodBoardToFirebase(moodData) {
 
 
 // Post routes
-app.post("/add-post", checkAuth, uploadPostImage.single("image"), (req, res) => {
-    const { title, content, category } = req.body; // Include category in the request
+app.post("/add-post", uploadPostImage.single("image"), checkAuth, async (req, res) => {
+    const { title, content, category } = req.body;
+    const userId = req.session.uid;
     const image = req.file ? `/uploads/${req.file.filename}` : null;
+
     const newPost = {
-        id: postIdCounter++,
         title,
         content,
         image,
-        comments: [],
+        category,
+        createdAt: Date.now(),
+        userId,
+        dislikeReasons: [],
         likes: 0,
         dislikes: 0,
-        dislikeReasons: [],
-        userId: req.session.uid,
-        category // Add category to the post
+        comments: []
     };
-    posts.push(newPost);
-    savePosts(); // Ensure to save the posts after adding
+
+    // Use push() to create a unique key for each post
+    const newPostRef = db.ref(`users/${userId}/posts`).push();
+    await newPostRef.set(newPost);
+
     res.redirect("/dashboard");
 });
+
+
+
 app.get('/posts/:category', (req, res) => {
     const { category } = req.params;
     const filteredPosts = posts.filter(post => post.category === category);
@@ -410,102 +637,116 @@ app.get('/posts/:category', (req, res) => {
     });
 });
 
-
-app.post("/add-comment", checkAuth, (req, res) => {
+app.post("/add-comment", checkAuth, async (req, res) => {
     const { postId, comment } = req.body;
     const userId = req.session.uid;
-    
-    const post = posts.find(post => post.id === parseInt(postId));
-    if (post) {
-        const newComment = {
-            text: comment,
-            userId: userId,
-            timestamp: Date.now()
-        };
-        
-        // Add to local array
-        if (!post.comments) {
-            post.comments = [];
+
+    if (!comment || !comment.trim()) {
+        return res.status(400).send("Comment cannot be empty");
+    }
+
+    try {
+        const postRef = db.ref(`users/${userId}/posts/${postId}`);
+        const snapshot = await postRef.once('value');
+        const post = snapshot.val();
+
+        if (!post) {
+            return res.status(404).send("Post not found");
         }
-        post.comments.push(newComment);
-        
-        // Add to Firebase
-        db.ref(`users/${post.userId}/posts`)
-            .orderByChild('id')
-            .equalTo(parseInt(postId))
-            .once('value')
-            .then((snapshot) => {
-                snapshot.forEach((child) => {
-                    child.ref.child('comments').push(newComment);
-                });
-            });
-        
-        savePosts();
+
+        const newComment = {
+            id: Date.now().toString(),
+            text: comment.trim(),
+            userId,
+            createdAt: Date.now()
+        };
+
+        const updatedPost = {
+            ...post,
+            comments: [...(post.comments || []), newComment]
+        };
+
+        await postRef.set(updatedPost);
+        res.redirect("/dashboard");
+    } catch (error) {
+        console.error("Error adding comment:", error);
+        res.status(500).send("Error adding comment");
     }
-    res.redirect("/dashboard");
 });
 
 
-app.post("/like-post", checkAuth, (req, res) => {
-    const { postId } = req.body;
+
+app.post("/like-post", checkAuth, async (req, res) => {
+    const { postId, postAuthorId } = req.body;
     const userId = req.session.uid;
-    
-    const post = posts.find(post => post.id === parseInt(postId));
-    if (post) {
-        // Update local array
-        if (!post.likes) post.likes = 0;
-        post.likes++;
-        
-        // Update in Firebase
-        db.ref(`users/${post.userId}/posts`)
-            .orderByChild('id')
-            .equalTo(parseInt(postId))
-            .once('value')
-            .then((snapshot) => {
-                snapshot.forEach((child) => {
-                    child.ref.update({
-                        likes: post.likes
-                    });
-                });
-            });
-        
-        savePosts();
+
+    try {
+        const postRef = db.ref(`users/${postAuthorId}/posts/${postId}`);
+        const snapshot = await postRef.once('value');
+        const post = snapshot.val();
+
+        if (!post) {
+            return res.status(404).send("Post not found");
+        }
+
+        // Update the post data
+        const updatedPost = {
+            ...post,
+            likes: (post.likes || 0) + 1,
+            likedBy: post.likedBy || []
+        };
+
+        if (!updatedPost.likedBy.includes(userId)) {
+            updatedPost.likedBy.push(userId);
+        }
+
+        await postRef.set(updatedPost);
+        res.redirect("/dashboard");
+    } catch (error) {
+        console.error("Error liking post:", error);
+        res.status(500).send("Error liking post");
     }
-    res.redirect("/dashboard");
 });
 
-app.post("/dislike-post", checkAuth, (req, res) => {
-    const { postId, reasons } = req.body;
+app.post("/dislike-post", checkAuth, async (req, res) => {
+    const { postId, postAuthorId, reasons } = req.body;
     const userId = req.session.uid;
-    
-    const post = posts.find(post => post.id === parseInt(postId));
-    if (post) {
-        // Update local array
-        if (!post.dislikes) post.dislikes = 0;
-        if (!post.dislikeReasons) post.dislikeReasons = [];
+
+    try {
+        const postRef = db.ref(`users/${postAuthorId}/posts/${postId}`);
+        const snapshot = await postRef.once('value');
+        const post = snapshot.val();
+
+        if (!post) {
+            return res.status(404).send("Post not found");
+        }
+
+        // Ensure reasons is not undefined
+        const reasonsArray = reasons ? (Array.isArray(reasons) ? reasons : [reasons]) : [];
         
-        post.dislikes++;
-        const reasonsArray = Array.isArray(reasons) ? reasons : [reasons];
-        post.dislikeReasons.push(...reasonsArray);
-        
-        // Update in Firebase
-        db.ref(`users/${post.userId}/posts`)
-            .orderByChild('id')
-            .equalTo(parseInt(postId))
-            .once('value')
-            .then((snapshot) => {
-                snapshot.forEach((child) => {
-                    child.ref.update({
-                        dislikes: post.dislikes,
-                        dislikeReasons: post.dislikeReasons
-                    });
-                });
-            });
-        
-        savePosts();
+        // Filter out any undefined values
+        const validReasons = reasonsArray.filter(reason => reason !== undefined);
+
+        // Update the post data
+        const updatedPost = {
+            ...post,
+            dislikes: (post.dislikes || 0) + 1,
+            dislikeReasons: [...(post.dislikeReasons || []), ...validReasons],
+            dislikedBy: post.dislikedBy || []
+        };
+
+        if (!updatedPost.dislikedBy.includes(userId)) {
+            updatedPost.dislikedBy.push(userId);
+        }
+
+        await postRef.set(updatedPost);
+        res.redirect("/dashboard");
+    } catch (error) {
+        console.error("Error disliking post:", error);
+        res.status(500).send("Error disliking post");
     }
-    res.redirect("/dashboard");
 });
+
 // Profile routes
 app.get("/profiles", checkAuth, (req, res) => {
     res.render("profiles", { profiles, user: req.session });
@@ -527,46 +768,102 @@ app.get("/create-profile", checkAuth, (req, res) => {
     res.render("createProfile", { user: req.session });
 });
 
-app.post("/create-profile", checkAuth, uploadProfilePic.single("profilePic"), (req, res) => {
-    const { name, email, bio } = req.body;
-    const profilePic = req.file ? `/profilePics/${req.file.filename}` : null;
-    const newProfile = {
-        id: profiles.length + 1,
-        name,
-        email,
-        bio: bio || "",
-        profilePic,
-        userId: req.session.uid,
-        followers: [] // Initialize followers array
-    };
-    profiles.push(newProfile);
-    saveProfiles();
-    pushToFirebase();
-    res.redirect("/profiles");
-});
-
-
-app.post("/follow/:id", checkAuth, (req, res) => {
-    const profile = profiles.find(p => p.id === parseInt(req.params.id));
-    if (profile && !profile.followers.includes(req.session.uid)) {
-        profile.followers.push(req.session.uid); // Add user ID to followers
-        saveProfiles(); // Save updated profiles
+app.post("/create-profile", checkAuth, uploadProfilePic.single("profilePic"), async (req, res) => {
+    try {
+        const { name, email, bio } = req.body;
+        const userId = req.session.uid;
+        const profilePic = req.file ? `/profilePics/${req.file.filename}` : null;
+        
+        const profileData = {
+            name,
+            email,
+            bio: bio || "",
+            profilePic,
+            followers: [],
+            following: [],
+            createdAt: admin.database.ServerValue.TIMESTAMP
+        };
+        
+        await db.ref(`users/${userId}/profile`).set(profileData);
+        
+        res.redirect("/profiles");
+    } catch (error) {
+        console.error('Error creating profile:', error);
+        res.status(500).send('Error creating profile');
     }
-    res.redirect("/profiles");
-});
+})
 
-app.post("/unfollow/:id", checkAuth, (req, res) => {
-    const profile = profiles.find(p => p.id === parseInt(req.params.id));
-    if (profile) {
-        const index = profile.followers.indexOf(req.session.uid);
-        if (index !== -1) {
-            profile.followers.splice(index, 1); // Remove user ID from followers
-            saveProfiles(); // Save updated profiles
-        }
+
+app.post('/follow/:userId', checkAuth, async (req, res) => {
+    try {
+        const currentUserId = req.session.uid;
+        const targetUserId = req.params.userId;
+        
+        // Get both user profiles
+        const currentUserRef = db.ref(`users/${currentUserId}/profile`);
+        const targetUserRef = db.ref(`users/${targetUserId}/profile`);
+        
+        // Update following for current user
+        await currentUserRef.child('following').transaction(following => {
+            following = following || [];
+            if (!following.includes(targetUserId)) {
+                following.push(targetUserId);
+            }
+            return following;
+        });
+        
+        // Update followers for target user
+        await targetUserRef.child('followers').transaction(followers => {
+            followers = followers || [];
+            if (!followers.includes(currentUserId)) {
+                followers.push(currentUserId);
+            }
+            return followers;
+        });
+        
+        res.redirect('/users-of-app');
+    } catch (error) {
+        console.error('Error following user:', error);
+        res.redirect('/users-of-app?error=Failed to follow user');
     }
-    res.redirect("/profiles");
 });
 
+// Unfollow user route
+app.post('/unfollow/:userId', checkAuth, async (req, res) => {
+    try {
+        const currentUserId = req.session.uid;
+        const targetUserId = req.params.userId;
+        
+        // Get both user profiles
+        const currentUserRef = db.ref(`users/${currentUserId}/profile`);
+        const targetUserRef = db.ref(`users/${targetUserId}/profile`);
+        
+        // Remove from following list
+        await currentUserRef.child('following').transaction(following => {
+            following = following || [];
+            const index = following.indexOf(targetUserId);
+            if (index > -1) {
+                following.splice(index, 1);
+            }
+            return following;
+        });
+        
+        // Remove from followers list
+        await targetUserRef.child('followers').transaction(followers => {
+            followers = followers || [];
+            const index = followers.indexOf(currentUserId);
+            if (index > -1) {
+                followers.splice(index, 1);
+            }
+            return followers;
+        });
+        
+        res.redirect('/users-of-app');
+    } catch (error) {
+        console.error('Error unfollowing user:', error);
+        res.redirect('/users-of-app?error=Failed to unfollow user');
+    }
+});
 //const path = require('path');
 
 // Load local posts from JSON file
@@ -576,8 +873,17 @@ const axios = require('axios');
 const SUBREDDIT_MAPPING = {
     technology: 'technology',
     education: 'education',
-    sports: 'sports'
+    sports: 'sports',
+    health: 'health',
+    entertainment: 'entertainment'
 };
+
+app.get('/posts/:category', async (req, res) => {
+    const { category } = req.params;
+    const filteredPosts = await getRedditPosts(category); // Fetch posts from Reddit
+    res.render('postsByCategory', { posts: filteredPosts, user: req.session });
+});
+
 
 // Function to fetch posts from Reddit
 async function getRedditPosts(category) {
@@ -699,19 +1005,82 @@ app.get('/explore', checkAuth, async (req, res) => {
         res.status(500).send('Error loading content');
     }
 });
+const getUserProfile = async (userId) => {
+    try {
+        const snapshot = await db.ref(`users/${userId}/profile`).once('value');
+        return snapshot.val();
+    } catch (error) {
+        console.error('Error fetching user profile:', error);
+        return null;
+    }
+};
+// Function to update user profile in Firebase
+async function updateUserProfile(userId, profileData) {
+    try {
+        await db.ref(`users/${userId}/profile`).update(profileData);
+        return true;
+    } catch (error) {
+        console.error('Error updating user profile:', error);
+        return false;
+    }
+}
 
-
-app.get('/users-of-app', checkAuth, (req, res) => {
-    const usersRef = db.ref('users'); // Reference to users in Firebase
-    usersRef.once('value').then(snapshot => {
+// Function to get all active users
+const getAllProfiles = async () => {
+    try {
+        const snapshot = await db.ref('users').once('value');
         const users = [];
-        snapshot.forEach(childSnapshot => {
+        
+        snapshot.forEach((childSnapshot) => {
+            const userId = childSnapshot.key;
             const userData = childSnapshot.val();
-            users.push(userData);
+            
+            if (userData && userData.profile) {
+                users.push({
+                    id: userId,
+                    ...userData.profile,
+                    followers: userData.profile.followers || [],
+                    following: userData.profile.following || []
+                });
+            }
         });
-        res.render('usersOfApp', { 
-            users, 
+        
+        return users;
+    } catch (error) {
+        console.error('Error fetching all profiles:', error);
+        return [];
+    }
+};
+
+// Updated users of app route with better error handling
+app.get('/users-of-app', checkAuth, async (req, res) => {
+    try {
+        // Get current user's ID from session
+        const currentUserId = req.session.uid;
+        
+        // Verify current user exists
+        const currentUser = await getUserProfile(currentUserId);
+        if (!currentUser) {
+            throw new Error('Current user profile not found');
+        }
+        
+        // Get all users
+        const allUsers = await getAllProfiles();
+        
+        // Filter out current user and format data
+        const users = allUsers
+            .filter(user => user.id !== currentUserId)
+            .map(user => ({
+                ...user,
+                followers: user.followers || [],
+                following: user.following || []
+            }));
+
+        res.render('usersOfApp', {
+            users,
+            currentUserId,
             user: req.session,
+            error: null,
             pages: [
                 { name: 'Dashboard', url: '/dashboard' },
                 { name: 'Focus Mode', url: '/focusMode' },
@@ -721,13 +1090,135 @@ app.get('/users-of-app', checkAuth, (req, res) => {
                 { name: 'Users of App', url: '/users-of-app' }
             ]
         });
-    }).catch(err => {
-        console.error("Error fetching users:", err);
-        res.status(500).send("Error loading users.");
-    });
+    } catch (error) {
+        console.error('Error in users-of-app route:', error);
+        res.render('usersOfApp', {
+            users: [],
+            currentUserId: req.session.uid,
+            user: req.session,
+            error: 'Unable to load users. Please try again later.',
+            pages: [
+                { name: 'Dashboard', url: '/dashboard' },
+                { name: 'Focus Mode', url: '/focusMode' },
+                { name: 'Mood Board', url: '/mood-board' },
+                { name: 'Profiles', url: '/profiles' },
+                { name: 'Explore', url: '/explore' },
+                { name: 'Users of App', url: '/users-of-app' }
+            ]
+        });
+    }
+});
+// Handle comments for explore posts
+
+
+// Get comments for explore posts
+app.post('/api/explore/comments', checkAuth, async (req, res) => {
+    const { postId, comment, source } = req.body;
+    const userId = req.session.uid;
+
+    try {
+        const userRef = db.ref(`users/${userId}/profile`);
+        const userSnapshot = await userRef.once('value');
+        const userProfile = userSnapshot.val();
+
+        if (!comment?.trim()) {
+            return res.status(400).json({ error: 'Comment cannot be empty' });
+        }
+
+        const commentData = {
+            id: Date.now().toString(),
+            text: comment.trim(),
+            author: userProfile.name || 'Anonymous',
+            userId,
+            createdAt: Date.now()
+        };
+
+        // Store all comments in a central location
+        const commentRef = db.ref(`comments/${postId}`);
+        const snapshot = await commentRef.once('value');
+        const existingComments = snapshot.val() || [];
+        
+        await commentRef.set([...existingComments, commentData]);
+        res.json({ success: true, comment: commentData });
+    } catch (error) {
+        console.error('Error adding comment:', error);
+        res.status(500).json({ error: 'Error adding comment' });
+    }
+});
+// Add this after your existing app.post('/api/explore/comments')
+app.post('/api/explore/comments', checkAuth, async (req, res) => {
+    const { postId, comment } = req.body;
+    const userId = req.session.uid;
+
+    try {
+        const userRef = db.ref(`users/${userId}/profile`);
+        const userSnapshot = await userRef.once('value');
+        const userProfile = userSnapshot.val();
+
+        if (!comment?.trim()) {
+            return res.redirect('/explore');
+        }
+
+        const commentData = {
+            id: Date.now().toString(),
+            text: comment.trim(),
+            author: userProfile.name || 'Anonymous',
+            userId,
+            createdAt: Date.now()
+        };
+
+        const commentRef = db.ref(`comments/${postId}`);
+        const snapshot = await commentRef.once('value');
+        const existingComments = snapshot.val() || [];
+        
+        await commentRef.set([...existingComments, commentData]);
+        res.redirect('/explore');
+    } catch (error) {
+        console.error('Error adding comment:', error);
+        res.redirect('/explore');
+    }
 });
 
+app.get('/api/explore/comments/:postId', checkAuth, async (req, res) => {
+    const { postId } = req.params;
+    try {
+        const commentsRef = db.ref(`comments/${postId}`);
+        const snapshot = await commentsRef.once('value');
+        const comments = snapshot.val() || [];
+        res.json({ comments });
+    } catch (error) {
+        console.error('Error fetching comments:', error);
+        res.status(500).json({ error: 'Error fetching comments' });
+    }
+});
+async function submitComment(event, postId, source, category) {
+    event.preventDefault();
+    const form = event.target;
+    const comment = form.comment.value;
 
+    try {
+        const response = await fetch('/api/explore/comment', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ postId, comment, source, category })
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            // Add comment to UI
+            const commentsList = form.closest('.comments-section').querySelector('.comments-list');
+            const li = document.createElement('li');
+            li.className = 'comment';
+            li.innerHTML = `<strong>${data.comment.author}:</strong> ${data.comment.text}`;
+            commentsList.appendChild(li);
+            form.reset();
+        }
+    } catch (error) {
+        console.error('Error:', error);
+    }
+}
 // Start server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {

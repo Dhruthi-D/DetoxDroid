@@ -4,35 +4,182 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Focus Mode</title>
+    <style>
+        :root {
+            --dark-primary: #2A2438;
+            --dark-secondary: #352B47;
+            --light-primary: #F8F7FD;
+            --light-secondary: #E6E6FA;
+            --accent-dark: #7B6B8D;
+            --accent-light: #B8B5C0;
+            --text-dark: #2A2438;
+            --text-light: #F8F7FD;
+            --highlight: #8A6FB1;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: var(--light-primary);
+            color: var(--text-dark);
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            position: relative;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 40%;
+            background: var(--dark-primary);
+            z-index: -1;
+        }
+
+        .focus-container {
+            background: var(--light-primary);
+            padding: 2.5rem;
+            border-radius: 20px;
+            box-shadow: 0 4px 25px rgba(0, 0, 0, 0.1);
+            margin-top: 2rem;
+            width: 90%;
+            max-width: 500px;
+            text-align: center;
+            border: 1px solid var(--accent-light);
+        }
+
+        h1 {
+            color: var(--text-light);
+            font-size: 2.5rem;
+            margin: 2rem 0;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        p {
+            color: var(--text-dark);
+            font-size: 1.2rem;
+            margin: 1rem 0;
+        }
+
+        input[type="number"] {
+            width: 150px;
+            padding: 12px;
+            border: 2px solid var(--accent-light);
+            border-radius: 10px;
+            font-size: 1.2rem;
+            margin: 1rem 0;
+            background: var(--light-secondary);
+            color: var(--text-dark);
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+
+        input[type="number"]:focus {
+            outline: none;
+            border-color: var(--highlight);
+            box-shadow: 0 0 0 3px rgba(138, 111, 177, 0.2);
+        }
+
+        button {
+            background: var(--highlight);
+            color: var(--text-light);
+            border: none;
+            padding: 12px 30px;
+            border-radius: 25px;
+            font-size: 1.1rem;
+            cursor: pointer;
+            margin: 1rem;
+            transition: all 0.3s ease;
+            border: 2px solid transparent;
+        }
+
+        button:hover {
+            background: var(--dark-secondary);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        #stop-focus-btn {
+            background: var(--error);
+        }
+
+        #stop-focus-btn:hover {
+            background: #e55757;
+        }
+
+        #timer-display {
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: var(--highlight);
+            margin: 2rem 0;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            background: var(--light-secondary);
+            padding: 1rem 2rem;
+            border-radius: 15px;
+            display: inline-block;
+            min-width: 250px;
+        }
+
+        .focus-controls {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        @media (max-width: 768px) {
+            .focus-container {
+                width: 95%;
+                padding: 1.5rem;
+            }
+
+            h1 {
+                font-size: 2rem;
+            }
+
+            #timer-display {
+                font-size: 2rem;
+                min-width: 200px;
+            }
+        }
+    </style>
 </head>
 <body>
     <h1>Focus Mode</h1>
     
-    <p>Set your focus time (in minutes):</p>
-    <input 
-        type="number" 
-        id="focus-time" 
-        name="focusTime" 
-        value="<%= focusTime %>" 
-        min="0.5" 
-        max="120" 
-        required
-    >
-
-    <button onclick="startFocusMode()">Start Focus</button>
-    <button id="stop-focus-btn" onclick="stopFocusMode()" style="display: none;">Stop Focus</button>
-    
-    <p id="timer-display">Remaining Time: 00:00</p> <!-- Display remaining time -->
+    <div class="focus-container">
+        <p>Set your focus time (in minutes):</p>
+        <input
+            type="number"
+            id="focus-time"
+            name="focusTime"
+            value="<%= focusTime %>"
+            min="0.5"
+            max="120"
+            required
+        >
+        
+        <div class="focus-controls">
+            <button onclick="startFocusMode()">Start Focus</button>
+            <button id="stop-focus-btn" onclick="stopFocusMode()" style="display: none;">Stop Focus</button>
+        </div>
+        
+        <p id="timer-display">Remaining Time: 00:00</p>
+    </div>
 
     <script>
         let timer;
         let remainingTime;
 
-        // Function to start the focus timer
         function startFocusMode() {
             var time = document.getElementById('focus-time').value;
-            remainingTime = time * 60; // Convert minutes to seconds
-            document.getElementById('stop-focus-btn').style.display = 'inline'; // Show the stop button
+            remainingTime = time * 60;
+            document.getElementById('stop-focus-btn').style.display = 'inline';
             updateTimerDisplay();
 
             timer = setInterval(function() {
@@ -40,35 +187,32 @@
                 updateTimerDisplay();
 
                 if (remainingTime <= 0) {
-                    clearInterval(timer); // Stop the timer
+                    clearInterval(timer);
                     alert("Focus Mode ended. Click OK to return to Dashboard.");
                     redirectToDashboard();
                 }
-            }, 1000); // Update every second
+            }, 1000);
         }
 
-        // Function to stop the focus mode
         function stopFocusMode() {
-            clearInterval(timer); // Stop the timer
+            clearInterval(timer);
             alert("Focus Mode stopped. Click OK to return.");
             redirectToDashboard();
         }
 
-        // Function to update the timer display
         function updateTimerDisplay() {
             var minutes = Math.floor(remainingTime / 60);
             var seconds = remainingTime % 60;
 
-            // Format minutes and seconds to two digits
             minutes = minutes < 10 ? "0" + minutes : minutes;
             seconds = seconds < 10 ? "0" + seconds : seconds;
 
-            document.getElementById('timer-display').textContent = "Remaining Time: " + minutes + ":" + seconds;
+            document.getElementById('timer-display').textContent = 
+                `Remaining Time: ${minutes}:${seconds}`;
         }
 
-        // Function to redirect to the dashboard
         function redirectToDashboard() {
-            window.location.href = '/'; // Redirect to the dashboard page
+            window.location.href = '/';
         }
     </script>
 </body>

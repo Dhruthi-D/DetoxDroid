@@ -1,6 +1,6 @@
 import sys
 import json
-from textblob import TextBlob
+from textblob import TextBlob #text process lib
 
 def analyze_sentiment(text):
     blob = TextBlob(text)
@@ -12,7 +12,7 @@ def analyze_sentiment(text):
 
 if __name__ == "__main__":
     try:
-        if len(sys.argv) < 2:
+        if len(sys.argv) < 2: #atleast one cli arg
             raise ValueError("No text input provided for analysis")
         text = sys.argv[1]
         sentiment = analyze_sentiment(text)

@@ -5,237 +5,319 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard</title>
     <style>
-        /* General Styles */
+        :root {
+            --dark-primary: #2A2438;
+            --dark-secondary: #352B47;
+            --light-primary: #F8F7FD;
+            --light-secondary: #E6E6FA;
+            --accent-dark: #7B6B8D;
+            --accent-light: #B8B5C0;
+            --text-dark: #2A2438;
+            --text-light: #F8F7FD;
+            --highlight: #8A6FB1;
+            --error: #FF6B6B;
+            --success: #4CAF50;
+        }
+
         body {
-            font-family: "Arial", sans-serif;
-            background-color: #111;
-            color: white;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: var(--light-primary);
+            color: var(--text-dark);
             margin: 0;
             padding: 0;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
+            min-height: 100vh;
+            position: relative;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 40%;
+            background: var(--dark-primary);
+            z-index: -1;
         }
 
         h1, h2 {
-            color: #fff;
+            color: var(--text-light);
             font-weight: 600;
+            text-align: center;
             margin-top: 50px;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         }
 
         a {
-            color: #fff;
+            color: var(--text-light);
             text-decoration: none;
-            background-color: #333;
-            padding: 10px 20px;
-            border-radius: 5px;
-            margin-top: 20px;
-            font-weight: bold;
+            background-color: var(--dark-secondary);
+            padding: 12px 24px;
+            border-radius: 25px;
+            margin: 20px auto;
+            display: inline-block;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
         }
 
         a:hover {
-            background-color: #555;
-        }
-
-        .post-card {
-            background-color: #222;
-            border-radius: 10px;
-            padding: 20px;
-            margin: 15px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
-            width: 300px;
-            transition: transform 0.3s ease;
-        }
-
-        .post-card:hover {
-            transform: scale(1.05);
-        }
-
-        .post-card h3 {
-            margin: 0;
-            font-size: 1.5rem;
-        }
-
-        .post-card img {
-            max-width: 100%;
-            margin: 10px 0;
-            border-radius: 5px;
-        }
-
-        .post-card p {
-            font-size: 1rem;
-            color: #bbb;
-            margin: 10px 0;
-        }
-
-        .post-card button {
-            background-color: red;
-            color: white;
-            border: none;
-            padding: 8px 15px;
-            border-radius: 5px;
-            cursor: pointer;
-            transition: background-color 0.3s ease;
-        }
-
-        .post-card button:hover {
-            background-color: darkred;
+            background-color: var(--highlight);
+            transform: translateY(-2px);
         }
 
         .dashboard-container {
             display: flex;
             flex-wrap: wrap;
             justify-content: center;
-            gap: 20px;
+            gap: 25px;
             padding: 20px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .post-card {
+            background-color: var(--light-primary);
+            border-radius: 15px;
+            padding: 25px;
+            margin: 15px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            width: 320px;
+            transition: all 0.3s ease;
+            border: 1px solid var(--accent-light);
+        }
+
+        .post-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 6px 25px rgba(0, 0, 0, 0.15);
+        }
+
+        .post-card h3 {
+            margin: 0;
+            font-size: 1.5rem;
+            color: var(--dark-primary);
+        }
+
+        .post-card img {
+            max-width: 100%;
+            margin: 15px 0;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .post-card p {
+            font-size: 1rem;
+            color: var(--text-dark);
+            margin: 15px 0;
         }
 
         .add-post-form {
-            background-color: #333;
+            background-color: var(--light-primary);
             padding: 30px;
-            border-radius: 10px;
-            margin-top: 40px;
-            width: 300px; 
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+            border-radius: 15px;
+            margin: 40px auto;
+            width: 90%;
+            max-width: 500px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            border: 1px solid var(--accent-light);
         }
 
         .add-post-form input,
         .add-post-form textarea,
         .add-post-form select {
-          width: calc(100% - 20px); /* Adjust width for padding */
-          padding: 10px; 
-          margin-bottom: 15px; 
-          border-radius: 5px; 
-          border: 1px solid #444; 
-          background-color:#222; 
-          color:white; 
-       }
-       
-       .add-post-form button { 
-          background-color : green; 
-          padding :10 px; 
-          border :none; 
-          border-radius :5 px; 
-          color:white; 
-          cursor:pointer; 
-       }
-       
-       .add-post-form button:hover { 
-          background-color : darkgreen; 
-       }
+            width: calc(100% - 20px);
+            padding: 12px;
+            margin-bottom: 15px;
+            border-radius: 8px;
+            border: 1px solid var(--accent-light);
+            background-color: var(--light-secondary);
+            color: var(--text-dark);
+            transition: all 0.3s ease;
+        }
+
+        .add-post-form input:focus,
+        .add-post-form textarea:focus,
+        .add-post-form select:focus {
+            outline: none;
+            border-color: var(--highlight);
+            box-shadow: 0 0 0 2px rgba(138, 111, 177, 0.2);
+        }
+
+        button {
+            background-color: var(--highlight);
+            color: var(--text-light);
+            border: none;
+            padding: 12px 24px;
+            border-radius: 25px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 500;
+            margin: 5px;
+        }
+
+        button:hover {
+            background-color: var(--dark-secondary);
+            transform: translateY(-2px);
+        }
+
+        button.btn-danger {
+            background-color: var(--error);
+        }
+
+        button.btn-danger:hover {
+            background-color: #e55757;
+        }
+
+        .likes-dislikes {
+            display: flex;
+            gap: 10px;
+            margin: 15px 0;
+            flex-wrap: wrap;
+        }
+
+        .comments {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: var(--light-secondary);
+            border-radius: 10px;
+        }
+
+        .comments h4 {
+            color: var(--dark-primary);
+            margin-bottom: 10px;
+        }
+
+        .comments ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        .comments li {
+            padding: 8px 0;
+            border-bottom: 1px solid var(--accent-light);
+        }
+
+        .dislike-reasons {
+            margin-top: 15px;
+            padding: 15px;
+            background-color: var(--light-secondary);
+            border-radius: 10px;
+        }
+
+        .dislike-reasons h4 {
+            color: var(--dark-primary);
+            margin-bottom: 10px;
+        }
+
+        @media (max-width: 768px) {
+            .post-card {
+                width: 100%;
+                margin: 10px;
+            }
+
+            .add-post-form {
+                width: 90%;
+                padding: 20px;
+            }
+
+            body::before {
+                height: 30%;
+            }
+        }
     </style>
 </head>
 <body>
     <h1>Dashboard</h1>
 
-    <!-- Show Posts -->
     <div class="dashboard-container">
-      <% if (posts.length > 0) { %> 
-      <% posts.forEach((post) => { %>
-      <div class="post-card">
-        <h3><%= post.title %></h3>
-        <% if (post.image) { %>
-        <img src="<%= post.image %>" alt="Post Image" />
-        <% } %>
-        <p><%= post.content %></p>
+        <% if (posts.length > 0) { %> 
+        <% posts.forEach((post) => { %>
+        <div class="post-card">
+            <h3><%= post.title %></h3>
+            <% if (post.image) { %>
+            <img src="<%= post.image %>" alt="Post Image" />
+            <% } %>
+            <p><%= post.content %></p>
 
-        <!-- Like and Dislike Section -->
-        <div class="likes-dislikes">
-          <!-- Like Button -->
-          <form action="/like-post" method="POST" style="display:inline">
-              <input type="hidden" name="postId" value="<%= post.id %>" />
-              <button type="submit" style="background-color:#4CAF50;color:white;">
-                  Like (<%= post.likes %>)
-              </button>
-          </form>
+            <div class="likes-dislikes">
+                <form action="/like-post" method="POST">
+                    <input type="hidden" name="postId" value="<%= post.id %>">
+                    <input type="hidden" name="postAuthorId" value="<%= post.userId %>">
+                    <button type="submit" class="btn btn-primary">Like (<%= post.likes || 0 %>)</button>
+                </form>
 
-          <!-- Dislike Form with Checkboxes -->
-          <form action="/dislike-post" method="POST" style="display:inline-block;margin-top:10px;">
-              <input type="hidden" name="postId" value="<%= post.id %>" />
-              <div>
-                  <label><input type="checkbox" name="reasons" value="Spam" /> Spam</label><br />
-                  <label><input type="checkbox" name="reasons" value="Harassment" /> Harassment</label><br />
-                  <label><input type="checkbox" name="reasons" value="Inappropriate Content" /> Inappropriate Content</label><br />
-                  <label><input type="checkbox" name="reasons" value="Misleading Info" /> Misleading Info</label><br />
-              </div>
-              <button type="submit" style="background-color:#FF9800;color:white;margin-top:5px;">
-                  Dislike (<%= post.dislikes %>)
-              </button>
-          </form>
+                <form action="/dislike-post" method="POST">
+                    <input type="hidden" name="postId" value="<%= post.id %>">
+                    <input type="hidden" name="postAuthorId" value="<%= post.userId %>">
+                    <select name="reasons" multiple>
+                        <option value="inappropriate">Inappropriate</option>
+                        <option value="spam">Spam</option>
+                        <option value="offensive">Offensive</option>
+                    </select>
+                    <button type="submit" class="btn btn-danger">Dislike (<%= post.dislikes || 0 %>)</button>
+                </form>
+            </div>
+
+            <div class="dislike-reasons">
+                <h4>Dislike Reasons:</h4>
+                <% if (post.dislikeReasons && post.dislikeReasons.length > 0) { %>
+                    <ul>
+                        <% post.dislikeReasons.forEach((reason) => { %>
+                            <li><%= reason %></li>
+                        <% }); %>
+                    </ul>
+                <% } else { %>
+                    <p>No dislike reasons yet.</p>
+                <% } %>
+            </div>
+
+            <div class="comments">
+                <h4>Comments:</h4>
+                <% if (post.comments && post.comments.length > 0) { %>
+                    <ul>
+                        <% post.comments.forEach((comment) => { %>
+                            <li><%= comment.text %></li>
+                        <% }); %>
+                    </ul>
+                <% } else { %>
+                    <p>No comments yet. Be the first to comment!</p>
+                <% } %>
+            </div>
+
+            <form action="/add-comment" method="POST">
+                <input type="hidden" name="postId" value="<%= post.id %>">
+                <input type="hidden" name="postAuthorId" value="<%= post.userId %>">
+                <input type="text" name="comment" required placeholder="Add a comment...">
+                <button type="submit" class="btn btn-primary">Add Comment</button>
+            </form>
+
+            <form action="/delete-post" method="POST">
+                <input type="hidden" name="postId" value="<%= post.id %>">
+                <button type="submit" class="btn btn-danger">Delete</button>
+            </form>
         </div>
-
-        <!-- Show Dislike Reasons -->
-        <div class="dislike-reasons" style="margin-top:10px;">
-          <h4>Dislike Reasons:</h4>
-          <% if (post.dislikeReasons && post.dislikeReasons.length > 0) { %>
-              <ul>
-                  <% post.dislikeReasons.forEach((reason) => { %>
-                      <li><%= reason %></li>
-                  <% }); %>
-              </ul>
-          <% } else { %>
-              <p>No dislike reasons yet.</p>
-          <% } %>
-      </div>
-
-        <!-- Comments Section -->
-        <div class="comments">
-          <h4>Comments:</h4>
-          <% if (post.comments && post.comments.length > 0) { %>
-              <ul>
-                  <% post.comments.forEach((comment) => { %>
-                      <li><%= comment.text %></li> <!-- Assuming comment has a 'text' property -->
-                  <% }); %>
-              </ul>
-          <% } else { %>
-              <p>No comments yet. Be the first to comment!</p>
-          <% } %>
-      </div>
-      
-
-         <!-- Add Comment Form -->
-         <form action="/add-comment" method="POST">
-             <input type="hidden" name="postId" value="<%= post.id %>" />
-             <textarea name="comment" rows="2" placeholder="Enter your comment" required></textarea><br />
-             <button type="submit" style="background-color:#2196F3;color:white;">Add Comment</button>
-         </form>
-
-         <!-- Delete Post Form -->
-         <form action="/delete-post" method="POST" style="margin-top:10px;">
-             <input type="hidden" name="postId" value="<%= post.id %>" />
-             <button type="submit" style="background-color:red;color:white;">Delete</button>
-         </form>
-
-      </div> <!-- End of Post Card -->
-      <% }); %> 
-      <% } else { %> 
-      <p>No posts yet. Add some posts to your dashboard!</p> 
-      <% } %> 
-    </div> <!-- End of Dashboard Container -->
-
-    <!-- Add New Post Form -->
-    <div class="add-post-form">
-      <h2>Add a New Post</h2>
-      <form action="/add-post" method="POST" enctype="multipart/form-data">
-        <input type="text" name="title" placeholder="Enter title" required />
-        <textarea name="content" rows="4" placeholder="Enter post content" required></textarea>
-        <input type="file" name="image" accept=".jpg,.jpeg,.png"/>
-        <select name="category" required>
-            <option value="" disabled selected>Select Category</option>
-            <option value="sports">Sports</option>
-            <option value="education">Education</option>
-            <option value="technology">Technology</option>
-            <option value="Random">Technology</option>
-            <!-- Add more categories as needed -->
-        </select>
-        <button type="submit">Add Post</button>
-    </form>
-     <!-- End of Add New Post Form -->
+        <% }); %>
+        <% } else { %>
+        <p>No posts yet. Add some posts to your dashboard!</p>
+        <% } %>
     </div>
 
-    <!-- Back to Home Link -->
-    <a href="/">Back to Home</a>
+    <div class="add-post-form">
+        <h2>Add a New Post</h2>
+        <form action="/add-post" method="POST" enctype="multipart/form-data">
+            <input type="text" name="title" placeholder="Enter title" required />
+            <textarea name="content" rows="4" placeholder="Enter post content" required></textarea>
+            <input type="file" name="image" accept=".jpg,.jpeg,.png"/>
+            <select name="category" required>
+                <option value="" disabled selected>Select Category</option>
+                <option value="sports">Sports</option>
+                <option value="education">Education</option>
+                <option value="technology">Technology</option>
+                <option value="Random">Random</option>
+            </select>
+            <button type="submit">Add Post</button>
+        </form>
+    </div>
 
+    <a href="/">Back to Home</a>
 </body>
 </html>
-

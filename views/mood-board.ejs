@@ -4,34 +4,231 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mood Board</title>
+    <style>
+        :root {
+            --dark-primary: #2A2438;
+            --dark-secondary: #352B47;
+            --light-primary: #F8F7FD;
+            --light-secondary: #E6E6FA;
+            --accent-dark: #7B6B8D;
+            --accent-light: #B8B5C0;
+            --text-dark: #2A2438;
+            --text-light: #F8F7FD;
+            --highlight: #8A6FB1;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: var(--light-primary);
+            color: var(--text-dark);
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            position: relative;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 40%;
+            background: var(--dark-primary);
+            z-index: -1;
+        }
+
+        h1 {
+            color: var(--text-light);
+            font-size: 2.5rem;
+            margin: 2rem 0;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+
+        .mood-container {
+            background: var(--light-primary);
+            padding: 2.5rem;
+            border-radius: 20px;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
+            margin: 2rem auto;
+            width: 90%;
+            max-width: 800px;
+            border: 1px solid var(--accent-light);
+        }
+
+        .mood-summary {
+            background: var(--dark-secondary);
+            color: var(--text-light);
+            padding: 1.5rem;
+            border-radius: 15px;
+            margin-bottom: 2rem;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .mood-entry {
+            background: var(--light-secondary);
+            padding: 1.5rem;
+            border-radius: 15px;
+            margin-bottom: 1.5rem;
+            border: 1px solid var(--accent-light);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .mood-entry:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .mood-entry::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            height: 100%;
+            width: 4px;
+            background: var(--highlight);
+            opacity: 0.7;
+        }
+
+        .mood-title {
+            color: var(--dark-primary);
+            margin: 0 0 0.5rem 0;
+            font-size: 1.3rem;
+            padding-left: 1rem;
+        }
+
+        .mood-stats {
+            padding-left: 1rem;
+            color: var(--text-dark);
+            font-size: 1.1rem;
+            opacity: 0.9;
+            display: flex;
+            gap: 1.5rem;
+            flex-wrap: wrap;
+        }
+
+        .mood-stat {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .alert {
+            background: var(--light-secondary);
+            border: 2px solid var(--highlight);
+            padding: 2rem;
+            margin-top: 2rem;
+            border-radius: 15px;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .button-container {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            margin-top: 1.5rem;
+        }
+
+        button {
+            background: var(--highlight);
+            color: var(--text-light);
+            border: none;
+            padding: 12px 30px;
+            border-radius: 25px;
+            font-size: 1.1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 2px solid transparent;
+        }
+
+        button:hover {
+            background: var(--dark-secondary);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        @media (max-width: 768px) {
+            .mood-container {
+                width: 95%;
+                padding: 1.5rem;
+            }
+
+            h1 {
+                font-size: 2rem;
+            }
+
+            .mood-entry {
+                padding: 1.2rem;
+            }
+
+            .mood-stats {
+                flex-direction: column;
+                gap: 0.5rem;
+            }
+        }
+    </style>
 </head>
 <body>
-<h1>Mood Board</h1>
+    <h1>Mood Board</h1>
 
-<% moodData.forEach(mood => { %>
-<div>
-   <h2><%= mood.title %></h2>
-   <p>Mood: <%= mood.mood %> (Polarity: <%= mood.polarity %>, Subjectivity: <%= mood.subjectivity %>)</p>
-</div>
-<% }) %>
+    <div class="mood-container">
+        <% if (moodData.length > 0) { %>
+            <div class="mood-summary">
+                <h2>Mood Overview</h2>
+                <p>Total Entries: <%= moodData.length %></p>
+                <p>Negative Entries: <%= negativeCount %></p>
+            </div>
 
-<% if (promptBreak) { %>
-<div class="alert alert-warning">
-   Your screen time is over an hour or your mood is negative. Would you like to take a break or continue?
-   <button onclick="takeBreak()">Take Break</button>
-   <button onclick="continueinapp()">Continue</button>
-</div>
-<% } %>
+            <% moodData.forEach(mood => { %>
+            <div class="mood-entry">
+                <h3 class="mood-title"><%= mood.title %></h3>
+                <div class="mood-stats">
+                    <div class="mood-stat">
+                        <strong>Mood:</strong> <%= mood.mood %>
+                    </div>
+                    <div class="mood-stat">
+                        <strong>Polarity:</strong> <%= mood.polarity.toFixed(2) %>
+                    </div>
+                    <div class="mood-stat">
+                        <strong>Subjectivity:</strong> <%= mood.subjectivity.toFixed(2) %>
+                    </div>
+                </div>
+            </div>
+            <% }) %>
+        <% } else { %>
+            <div class="mood-entry">
+                <p>No mood entries yet. Start interacting to generate mood data!</p>
+            </div>
+        <% } %>
 
-<script>
-function takeBreak() {
-   window.location.href = '/logout'; // Redirects to logout or exit logic
-}
+        <% if (negativeCount > 0) { %>
+        <div class="alert">
+            <h3>Take a Moment</h3>
+            <p>We've noticed some negative patterns. Would you like to take a break?</p>
+            <div class="button-container">
+                <button onclick="takeBreak()">Take Break</button>
+                <button onclick="continueinapp()">Continue</button>
+            </div>
+        </div>
+        <% } %>
+    </div>
 
-function continueinapp() {
-   // Just stay on the page
-}
-</script>
+    <script>
+        function takeBreak() {
+            window.location.href = '/logout';
+        }
 
+        function continueinapp() {
+            // Just stay on the page
+        }
+    </script>
 </body>
 </html>

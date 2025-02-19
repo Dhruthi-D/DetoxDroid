@@ -1,0 +1,157 @@
+<style>
+    :root {
+        --dark-primary: #2A2438;
+        --dark-secondary: #352B47;
+        --light-primary: #F8F7FD;
+        --light-secondary: #E6E6FA;
+        --accent-dark: #7B6B8D;
+        --accent-light: #B8B5C0;
+        --text-dark: #2A2438;
+        --text-light: #F8F7FD;
+        --highlight: #8A6FB1;
+        --primary-dark: var(--dark-primary);
+        --background: var(--light-primary);
+        --shadow: rgba(0, 0, 0, 0.1);
+    }
+
+    * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+
+    body {
+        background: var(--light-primary);
+        color: var(--text-dark);
+        line-height: 1.6;
+    }
+
+    .category-section {
+        padding: 2rem;
+        background: var(--background);
+    }
+
+    .category-title {
+        color: var(--text-dark);
+        font-size: 1.8rem;
+        font-weight: 600;
+        margin-bottom: 1.5rem;
+        padding-bottom: 0.5rem;
+        border-bottom: 3px solid var(--primary-dark);
+    }
+
+    .posts-grid {
+        display: grid;
+        grid-template-columns: repeat(1, 1fr);
+        gap: 1.5rem;
+        margin-bottom: 2rem;
+    }
+
+    @media (min-width: 768px) {
+        .posts-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+
+    @media (min-width: 1024px) {
+        .posts-grid {
+            grid-template-columns: repeat(3, 1fr);
+        }
+    }
+
+    .post-card {
+        background: var(--text-light);
+        border-radius: 1rem;
+        box-shadow: 0 4px 15px var(--shadow);
+        overflow: hidden;
+        transition: transform 0.3s ease;
+    }
+
+    .post-card:hover {
+        transform: translateY(-5px);
+    }
+
+    .post-image {
+        width: 100%;
+        height: 12rem;
+        object-fit: cover;
+    }
+
+    .post-content {
+        padding: 1rem;
+    }
+
+    .post-title {
+        color: var(--text-dark);
+        font-size: 1.1rem;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+    }
+
+    .post-excerpt {
+        color: var(--text-dark);
+        opacity: 0.8;
+        margin-bottom: 0.75rem;
+        line-height: 1.5;
+    }
+
+    .post-meta {
+        font-size: 0.875rem;
+        color: var(--primary-dark);
+        margin-bottom: 1rem;
+    }
+
+    .post-meta p {
+        margin-bottom: 0.25rem;
+    }
+
+    .read-more-btn {
+        display: inline-block;
+        background: var(--highlight);
+        color: var(--text-light);
+        padding: 0.5rem 1rem;
+        border-radius: 0.5rem;
+        text-decoration: none;
+        transition: background-color 0.3s ease;
+        margin-top: 0.75rem;
+    }
+
+    .read-more-btn:hover {
+        background: var(--primary-dark);
+    }
+</style>
+
+<div class="category-section">
+    <% for (const category in categorizedPosts) { %>
+        <h2 class="category-title"><%= category.charAt(0).toUpperCase() + category.slice(1) %></h2>
+        <div class="posts-grid">
+            <% categorizedPosts[category].forEach(post => { %>
+                <div class="post-card">
+                    <% if (post.image) { %>
+                        <img src="<%= post.image %>" alt="<%= post.title %>" class="post-image">
+                    <% } %>
+                    <div class="post-content">
+                        <h3 class="post-title"><%= post.title %></h3>
+                        <% if (post.content && post.content.length > 200) { %>
+                            <p class="post-excerpt"><%= post.content.substring(0, 200) %>...</p>
+                        <% } else { %>
+                            <p class="post-excerpt"><%= post.content %></p>
+                        <% } %>
+                        <% if (post.source) { %>
+                            <div class="post-meta">
+                                <p>Posted in <%= post.source %></p>
+                                <p>By <%= post.author %></p>
+                                <p>Score: <%= post.score %></p>
+                                <p><%= moment(post.created).fromNow() %></p>
+                            </div>
+                            <a href="<%= post.url %>" target="_blank" class="read-more-btn">
+                                Read on Reddit
+                            </a>
+                        <% } %>
+                    </div>
+                </div>
+            <% }) %>
+        </div>
+    <% } %>
+</div>

@@ -1,14 +1,15 @@
-const fs = require("fs");
-const express = require("express");
-const bodyParser = require("body-parser");
-const multer = require("multer");
-const path = require("path");
-const cookieParser = require('cookie-parser');
+const fs = require("fs");//file syste read write
+const express = require("express");//manage web server routing
+const bodyParser = require("body-parser"); // parse middleware re -json url
+const multer = require("multer");//post
+const path = require("path");//file
+const cookieParser = require('cookie-parser');//parse cookie
 const session = require('express-session');
-const { spawnSync } = require("child_process");
+const { spawnSync } = require("child_process"); //spawn new process -python run over node js
 
 const admin = require("firebase-admin");
 const serviceAccount = require("./firebase_cred.json");
+
 
 
 // Initialize Firebase Admin
@@ -31,6 +32,8 @@ function loadScreenTime() {
         screenTime = {};
     }
 }
+
+
 
 // Save screen time data
 function saveScreenTime() {
@@ -174,17 +177,22 @@ app.get('/', (req, res) => {
 
 
 // Update Screen Time Endpoint
-app.post('/update-screen-time', checkAuth, (req, res) => {
+app.post('/api/screen-time/update', checkAuth, (req, res) => {
     const userId = req.session.uid;
-    updateScreenTime(userId);
+    if (!screenTime[userId]) {
+        screenTime[userId] = { totalSeconds: 0 };
+    }
+    screenTime[userId].totalSeconds += 1;
+    saveScreenTime();
     res.sendStatus(200);
 });
+
 // Reset Screen Time Endpoint
-app.post('/reset-screen-time', checkAuth, (req, res) => {
+app.post('/api/screen-time/reset', checkAuth, (req, res) => {
     const userId = req.session.uid;
     if (screenTime[userId]) {
-        screenTime[userId].totalSeconds = 0; // Reset total minutes
-        saveScreenTime(); // Save updated screen time
+        screenTime[userId].totalSeconds = 0;
+        saveScreenTime();
     }
     res.sendStatus(200);
 });
@@ -222,7 +230,12 @@ app.post("/delete-post", checkAuth, async (req, res) => {
 });
 
 
-
+// Get current screen time for logged-in user
+app.get('/api/screen-time/current', checkAuth, (req, res) => {
+    const userId = req.session.uid;
+    const totalSeconds = screenTime[userId]?.totalSeconds || 0;
+    res.json({ totalSeconds });
+});
 app.get('/login', (req, res) => {
     res.render('index', { error: null });
 });
@@ -262,6 +275,85 @@ app.post('/login', async (req, res) => {
         }
     }
 });
+app.get("/edit-profile", checkAuth, async (req, res) => {
+    try {
+        const userId = req.session.uid;
+        const userRef = db.ref(`users/${userId}/profile`);
+        const snapshot = await userRef.once('value');
+        const profile = snapshot.val();
+
+        if (!profile) {
+            return res.status(404).send("Profile not found");
+        }
+
+        res.render("editProfile", { 
+            profile,
+            user: req.session,
+            error: null 
+        });
+    } catch (error) {
+        console.error("Error fetching profile:", error);
+        res.status(500).send("Error loading profile");
+    }
+});
+app.post("/update-profile", checkAuth, uploadProfilePic.single("profilePic"), async (req, res) => {
+    const { name, email, bio } = req.body;
+    const userId = req.session.uid;
+
+    // Check if a file was uploaded
+    let profilePic = null;
+    if (req.file) {
+        profilePic = `/profilePics/${req.file.filename}`; // Set profilePic if a file was uploaded
+    }
+
+    try {
+        // Fetch existing profile from Firebase
+        const profileSnapshot = await db.ref(`users/${userId}/profile`).once('value');
+        const existingProfile = profileSnapshot.val();
+
+        if (existingProfile) {
+            // Create an object to hold the updated fields
+            const updatedProfile = {};
+
+            // Check for changes and update only if necessary
+            if (existingProfile.name !== name) {
+                updatedProfile.name = name;
+            }
+            if (existingProfile.email !== email) {
+                updatedProfile.email = email;
+            }
+            if (existingProfile.bio !== bio) {
+                updatedProfile.bio = bio;
+            }
+            // Only update profilePic if a new one was uploaded
+            if (profilePic !== null && existingProfile.profilePic !== profilePic) {
+                updatedProfile.profilePic = profilePic;
+            }
+
+            // If there are any updates to apply, save them to Firebase
+            if (Object.keys(updatedProfile).length > 0) {
+                await db.ref(`users/${userId}/profile`).update(updatedProfile);
+                console.log("Profile updated successfully:", updatedProfile);
+            } else {
+                console.log("No changes detected in profile.");
+            }
+
+            // Reload user data from Firebase to ensure local state is up-to-date
+            await loadUserData(userId);
+
+            res.redirect("/profiles");
+        } else {
+            res.status(404).send("Profile not found");
+        }
+    } catch (error) {
+        console.error("Error updating profile:", error);
+        res.status(500).send("Failed to update profile");
+    }
+});
+
+
+
+
 
 async function loadUserData(userId) {
     const userPostsRef = db.ref(`users/${userId}/posts`);
@@ -327,6 +419,16 @@ app.get('/logout', (req, res) => {
     req.session.destroy();
     res.redirect('/');
 });
+app.post('/logout', (req, res) => {
+    req.session.destroy(err => {
+        if (err) {
+            return res.status(500).send('Logout failed');
+        }
+        res.clearCookie('connect.sid'); // Clear cookie if using sessions
+        res.sendStatus(200); // Send success response
+    });
+});
+
 
 app.get("/dashboard", checkAuth, async (req, res) => {
     try {
@@ -384,52 +486,92 @@ try {
     return res.status(500).json({ error: "Error parsing sentiment data" });
 }
 
-
 app.get("/mood-board", checkAuth, async (req, res) => {
     const userId = req.session.uid;
     const moodData = [];
+    let negativeCount = 0;
     
-    // Fetch user's posts
+    // Fetch user's posts and their comments
     const userPostsRef = db.ref(`users/${userId}/posts`);
     const postsSnapshot = await userPostsRef.once('value');
 
-    let negativeCount = 0;
+    // Fetch user's explore comments
+    const exploreCommentsRef = db.ref('comments');
+    const exploreCommentsSnapshot = await exploreCommentsRef.once('value');
+    const allExploreComments = exploreCommentsSnapshot.val() || {};
 
+    // Process posts
     postsSnapshot.forEach(post => {
         const postData = post.val();
-        const pythonProcess = spawnSync('python', ['analyze_sentiment.py', postData.content]);
-        const output = pythonProcess.stdout.toString();
-
-        if (!output) {
-            console.error("Empty output from Python script");
-            return res.status(500).json({ error: "No data returned from sentiment analysis" });
-        }
-
-        try {
-            const sentiment = JSON.parse(output);
-            moodData.push({
-                title: postData.title,
-                mood: sentiment.polarity > 0 ? "Positive" : sentiment.polarity < 0 ? "Negative" : "Neutral",
-                polarity: sentiment.polarity,
-                subjectivity: sentiment.subjectivity,
+        analyzeContent(postData.content, postData.title, "Post", moodData);
+        
+        // Analyze post comments
+        if (postData.comments) {
+            postData.comments.forEach(comment => {
+                if (comment.userId === userId) {
+                    analyzeContent(comment.text, "Comment on: " + postData.title, "Comment", moodData);
+                }
             });
-            if (sentiment.polarity < 0) {
-                negativeCount++;
-            }
-        } catch (error) {
-            console.error("Error parsing JSON:", error);
-            return res.status(500).json({ error: "Error parsing sentiment data" });
         }
     });
 
+    // Process explore comments
+    Object.entries(allExploreComments).forEach(([postId, comments]) => {
+        if (Array.isArray(comments)) {
+            comments.forEach(comment => {
+                if (comment.userId === userId) {
+                    analyzeContent(comment.text, "Explore Comment", "Explore Comment", moodData);
+                }
+            });
+        }
+    });
+
+    // Count negative entries
+    negativeCount = moodData.filter(item => item.polarity < 0).length;
+
     // Check user screen time
-    const totalMinutes = screenTime[userId]?.totalMinutes || 0;
+    const totalMinutes = screenTime[userId]?.totalSeconds / 60 || 0;
 
     // Determine if a prompt should be shown
-    const promptBreak = totalMinutes > 60 || negativeCount > 0; // Example thresholds
+    const promptBreak = totalMinutes > 60 || negativeCount > 3;
 
     res.render("mood-board", { moodData, negativeCount, promptBreak });
 });
+
+function analyzeContent(content, title, type, moodData) {
+    if (!content) return;
+    
+    const pythonProcess = spawnSync('python', ['analyze_sentiment.py', content]);
+    const output = pythonProcess.stdout.toString();
+
+    if (!output) {
+        console.error("Empty output from Python script");
+        return;
+    }
+
+    try {
+        const sentiment = JSON.parse(output);
+        moodData.push({
+            title: `${type}: ${title}`,
+            mood: sentiment.polarity > 0 ? "Positive" : sentiment.polarity < 0 ? "Negative" : "Neutral",
+            polarity: sentiment.polarity,
+            subjectivity: sentiment.subjectivity,
+            type: type
+        });
+    } catch (error) {
+        console.error("Error parsing sentiment JSON:", error);
+    }
+}
+
+
+    // Check user screen time
+   /* const totalMinutes = screenTime[userId]?.totalMinutes || 0;
+
+     Determine if a prompt should be shown
+    const promptBreak = totalMinutes > 60 || negativeCount > 0; Example thresholds
+
+    res.render("mood-board", { moodData, negativeCount, promptBreak });*/
+
 
 
 
@@ -455,7 +597,6 @@ app.post("/add-post", uploadPostImage.single("image"), checkAuth, async (req, re
     const image = req.file ? `/uploads/${req.file.filename}` : null;
 
     const newPost = {
-        //id: generateUniqueId(),
         title,
         content,
         image,
@@ -468,10 +609,13 @@ app.post("/add-post", uploadPostImage.single("image"), checkAuth, async (req, re
         comments: []
     };
 
-    // Add to Firebase directly
-    await db.ref(`users/${userId}/posts/${newPost.id}`).set(newPost);
+    // Use push() to create a unique key for each post
+    const newPostRef = db.ref(`users/${userId}/posts`).push();
+    await newPostRef.set(newPost);
+
     res.redirect("/dashboard");
-});;
+});
+
 
 
 app.get('/posts/:category', (req, res) => {
@@ -962,6 +1106,162 @@ app.get('/users-of-app', checkAuth, async (req, res) => {
                 { name: 'Users of App', url: '/users-of-app' }
             ]
         });
+    }
+});
+// Handle comments for explore posts
+
+
+// Get comments for explore posts
+app.post('/api/explore/comments', checkAuth, async (req, res) => {
+    const { postId, comment, source } = req.body;
+    const userId = req.session.uid;
+
+    try {
+        const userRef = db.ref(`users/${userId}/profile`);
+        const userSnapshot = await userRef.once('value');
+        const userProfile = userSnapshot.val();
+
+        if (!comment?.trim()) {
+            return res.status(400).json({ error: 'Comment cannot be empty' });
+        }
+
+        const commentData = {
+            id: Date.now().toString(),
+            text: comment.trim(),
+            author: userProfile.name || 'Anonymous',
+            userId,
+            createdAt: Date.now()
+        };
+
+        // Store all comments in a central location
+        const commentRef = db.ref(`comments/${postId}`);
+        const snapshot = await commentRef.once('value');
+        const existingComments = snapshot.val() || [];
+        
+        await commentRef.set([...existingComments, commentData]);
+        res.json({ success: true, comment: commentData });
+    } catch (error) {
+        console.error('Error adding comment:', error);
+        res.status(500).json({ error: 'Error adding comment' });
+    }
+});
+// Add this after your existing app.post('/api/explore/comments')
+app.post('/api/explore/comments', checkAuth, async (req, res) => {
+    const { postId, comment } = req.body;
+    const userId = req.session.uid;
+
+    try {
+        const userRef = db.ref(`users/${userId}/profile`);
+        const userSnapshot = await userRef.once('value');
+        const userProfile = userSnapshot.val();
+
+        if (!comment?.trim()) {
+            return res.redirect('/explore');
+        }
+
+        const commentData = {
+            id: Date.now().toString(),
+            text: comment.trim(),
+            author: userProfile.name || 'Anonymous',
+            userId,
+            createdAt: Date.now()
+        };
+
+        const commentRef = db.ref(`comments/${postId}`);
+        const snapshot = await commentRef.once('value');
+        const existingComments = snapshot.val() || [];
+        
+        await commentRef.set([...existingComments, commentData]);
+        res.redirect('/explore');
+    } catch (error) {
+        console.error('Error adding comment:', error);
+        res.redirect('/explore');
+    }
+});
+
+app.get('/api/explore/comments/:postId', checkAuth, async (req, res) => {
+    const { postId } = req.params;
+    try {
+        const commentsRef = db.ref(`comments/${postId}`);
+        const snapshot = await commentsRef.once('value');
+        const comments = snapshot.val() || [];
+        res.json({ comments });
+    } catch (error) {
+        console.error('Error fetching comments:', error);
+        res.status(500).json({ error: 'Error fetching comments' });
+    }
+});
+async function submitComment(event, postId, source, category) {
+    event.preventDefault();
+    const form = event.target;
+    const comment = form.comment.value;
+
+    try {
+        const response = await fetch('/api/explore/comment', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ postId, comment, source, category })
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            // Add comment to UI
+            const commentsList = form.closest('.comments-section').querySelector('.comments-list');
+            const li = document.createElement('li');
+            li.className = 'comment';
+            li.innerHTML = `<strong>${data.comment.author}:</strong> ${data.comment.text}`;
+            commentsList.appendChild(li);
+            form.reset();
+        }
+    } catch (error) {
+        console.error('Error:', error);
+    }
+}
+app.post("/delete-profile/:id", checkAuth, async (req, res) => {
+    const userId = req.session.uid;
+
+    // Validate that user can only delete their own profile
+    if (userId !== req.params.id) {
+        return res.status(403).send("Unauthorized");
+    }
+
+    try {
+        const userRef = db.ref(`users/${userId}`);
+        const profileSnapshot = await userRef.child('profile').once('value');
+        const profile = profileSnapshot.val();
+
+        if (!profile) {
+            return res.status(404).send("Profile not found");
+        }
+
+        // Delete profile picture if it exists
+        if (profile.profilePic) {
+            const picPath = path.join(__dirname, 'public', profile.profilePic);
+            try {
+                fs.unlinkSync(picPath);
+            } catch (err) {
+                console.error("Error deleting profile picture:", err);
+            }
+        }
+
+        // Delete user's posts
+        await userRef.child('posts').remove();
+
+        // Delete user's profile
+        await userRef.child('profile').remove();
+
+        // Clear session and redirect to login
+        req.session.destroy((err) => {
+            if (err) {
+                console.error("Error destroying session:", err);
+            }
+            res.redirect('/login');
+        });
+    } catch (error) {
+        console.error("Error deleting profile:", error);
+        res.status(500).send("Error deleting profile");
     }
 });
 // Start server

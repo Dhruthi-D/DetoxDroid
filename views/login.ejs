@@ -1,5 +1,121 @@
-<form action="/login" method="POST">
-    <input type="email" name="email" placeholder="Email" required>
-    <input type="password" name="password" placeholder="Password" required>
-    <button type="submit">Login</button>
-</form>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: #121212;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .login-container {
+            background-color: #1e1e1e;
+            border-radius: 12px;
+            padding: 2rem;
+            width: 100%;
+            max-width: 400px;
+            margin: 1rem;
+        }
+
+        h1 {
+            color: #ffffff;
+            font-size: 1.75rem;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        input {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            background: #ffffff;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            color: #333;
+            transition: box-shadow 0.2s ease;
+        }
+
+        input:focus {
+            outline: none;
+            box-shadow: 0 0 0 2px #666;
+        }
+
+        input::placeholder {
+            color: #666;
+        }
+
+        .login-button {
+            width: 100%;
+            padding: 0.75rem;
+            background: #2c2c2c;
+            border: none;
+            border-radius: 8px;
+            color: #fff;
+            font-size: 1rem;
+            cursor: pointer;
+            margin: 1.5rem 0;
+            transition: background-color 0.2s ease;
+        }
+
+        .login-button:hover {
+            background: #3c3c3c;
+        }
+
+        .signup-text {
+            color: #999;
+            text-align: center;
+            margin-top: 1rem;
+        }
+
+        .signup-link {
+            color: #fff;
+            text-decoration: none;
+            margin-left: 0.5rem;
+        }
+
+        .signup-link:hover {
+            text-decoration: underline;
+        }
+
+        @media (max-width: 480px) {
+            .login-container {
+                margin: 1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <h1>Login</h1>
+        <form action="/login" method="POST">
+            <div class="form-group">
+                <input type="email" name="email" placeholder="Enter email" required>
+            </div>
+            <div class="form-group">
+                <input type="password" name="password" placeholder="Enter password" required>
+            </div>
+            <button type="submit" class="login-button">Login</button>
+            <div class="signup-text">
+                Don't have an account?
+                <a href="/signup" class="signup-link">Sign Up</a>
+            </div>
+        </form>
+    </div>
+</body>
+</html>

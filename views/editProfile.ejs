@@ -1,76 +1,120 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Edit Profile</title>
-  <style>
-    body {
-      background-color: black;
-      color: white;
-      font-family: Arial, sans-serif;
-      margin: 0;
-      padding: 0;
-    }
-    h1 {
-      text-align: center;
-      margin-top: 20px;
-      font-size: 2.5em;
-      color: #89cef7;
-    }
-    form {
-      background-color: #333;
-      border: 1px solid #444;
-      border-radius: 8px;
-      padding: 20px;
-      width: 80%;
-      max-width: 600px;
-      margin: 20px auto;
-      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.7);
-    }
-    label {
-      display: block;
-      margin-bottom: 10px;
-      font-size: 1.2em;
-      color: #89cef7;
-    }
-    input, textarea {
-      width: 100%;
-      padding: 10px;
-      margin-bottom: 20px;
-      border-radius: 5px;
-      border: 1px solid #444;
-      background-color: #555;
-      color: white;
-    }
-    input[type="submit"] {
-      background-color: #89cef7;
-      color: black;
-      border: none;
-      cursor: pointer;
-      width: 100%;
-      padding: 10px;
-      font-size: 1.2em;
-    }
-    input[type="submit"]:hover {
-      background-color: white;
-      color: #89cef7;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edit Profile</title>
+    <link rel="stylesheet" href="/path/to/bootstrap.css"> <!-- Adjust path as necessary -->
 </head>
 <body>
-  <h1>Edit Profile</h1>
-  <form action="/edit-profile/<%= profile.id %>" method="POST" enctype="multipart/form-data">
-    <label for="name">Name:</label>
-    <input type="text" id="name" name="name" value="<%= profile.name %>" required><br><br>
-    <label for="email">Email:</label>
-    <input type="email" id="email" name="email" value="<%= profile.email %>" required><br><br>
-    <label for="bio">Biography:</label>
-    <textarea id="bio" name="bio"><%= profile.bio %></textarea><br><br>
-    <label for="profilePic">Upload New Profile Picture:</label>
-    <input type="file" id="profilePic" name="profilePic" accept="image/*"><br><br>
-    <button type="submit">Save Changes</button>
-  </form>
-  
+
+<nav class="navbar navbar-expand-lg navbar-light bg-light">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="#">DetoxDroid</a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarNav">
+            <ul class="navbar-nav">
+                <li class="nav-item">
+                    <a class="nav-link active" aria-current="page" href="/dashboard">Dashboard</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="/profiles">Profiles</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="/logout">Logout</a>
+                </li>
+            </ul>
+        </div>
+    </div>
+</nav>
+
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="mb-0">Edit Profile</h2>
+                </div>
+                <div class="card-body">
+                    <% if (error) { %>
+                        <div class="alert alert-danger">
+                            <%= error %>
+                        </div>
+                    <% } %>
+
+                    <!-- Ensure the action URL includes the profile ID for updating -->
+                    <form action="/update-profile/<%= profile.id %>" method="POST" enctype="multipart/form-data"> 
+                        <div class="mb-3">
+                            <label for="name" class="form-label">Name</label>
+                            <input 
+                                type="text" 
+                                class="form-control" 
+                                id="name" 
+                                name="name" 
+                                value="<%= profile.name %>"
+                                required
+                            >
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="email" class="form-label">Email</label>
+                            <input 
+                                type="email" 
+                                class="form-control" 
+                                id="email" 
+                                name="email" 
+                                value="<%= profile.email %>"
+                                required
+                            >
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="bio" class="form-label">Bio</label>
+                            <textarea 
+                                class="form-control" 
+                                id="bio" 
+                                name="bio" 
+                                rows="3"
+                            ><%= profile.bio %></textarea>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="profilePic" class="form-label">Profile Picture</label>
+                            <% if (profile.profilePic) { %>
+                                <div class="mb-2">
+                                    <img src="<%= profile.profilePic %>" alt="Current Profile Picture" class="img-thumbnail" style="max-width: 200px;">
+                                </div>
+                            <% } %>
+                            <input 
+                                type="file" 
+                                class="form-control" 
+                                id="profilePic" 
+                                name="profilePic"
+                                accept="image/*"
+                            >
+                        </div>
+
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                            <!-- Cancel button to go back to profiles -->
+                            <a href="/profiles" class="btn btn-secondary me-md-2">Cancel</a> 
+                            <!-- Submit button to update profile -->
+                            <button type="submit" class="btn btn-primary">Update Profile</button> 
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<footer class="bg-light text-center text-lg-start mt-auto py-3">
+    <div class="container p-4">
+        <p>© 2024 DetoxDroid. All rights reserved.</p>
+    </div>
+</footer>
+
+<script src="/path/to/bootstrap.bundle.js"></script> <!-- Adjust path as necessary -->
 </body>
 </html>

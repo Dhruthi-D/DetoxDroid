@@ -4,66 +4,276 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DetoxDroid</title>
-    <link rel="stylesheet" href="/css/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css"> <!-- Link to Font Awesome -->
+    <style>
+        :root {
+            --dark-primary: #2A2438;
+            --dark-secondary: #352B47;
+            --light-primary: #F8F7FD;
+            --light-secondary: #E6E6FA;
+            --accent-dark: #7B6B8D;
+            --accent-light: #B8B5C0;
+            --text-dark: #2A2438;
+            --text-light: #F8F7FD;
+            --highlight: #8A6FB1;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background: var(--light-primary);
+            color: var(--text-dark);
+            line-height: 1.6;
+            position: relative;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 50%;
+            background: var(--dark-primary);
+            z-index: -1;
+        }
+
+        .main-nav {
+            background: var(--dark-secondary);
+            padding: 1rem 2rem;
+            box-shadow: 0 2px 15px rgba(0, 0, 0, 0.2);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+        }
+
+        .nav-brand {
+            font-size: 1.8rem;
+            font-weight: bold;
+            color: var(--light-primary);
+            text-decoration: none;
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.2);
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 2rem;
+            list-style: none;
+        }
+
+        .nav-links a {
+            text-decoration: none;
+            color: var(--light-secondary);
+            font-weight: 500;
+            transition: all 0.3s ease;
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            display: flex;
+            align-items: center; /* Align icons and text */
+        }
+
+        .nav-links a:hover {
+            background: var(--highlight);
+            color: var(--text-light);
+            box-shadow: 0 0 15px rgba(155, 143, 204, 0.3);
+        }
+
+        .nav-links a i {
+            margin-right: 0.5rem; /* Space between icon and text */
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 2rem auto;
+            padding: 0 2rem;
+        }
+
+        h1 {
+            color: var(--text-light);
+            margin-bottom: 2.5rem;
+            font-size: 2.5rem;
+            text-align: center;
+            text-shadow: 0 0 15px rgba(255, 255, 255, 0.2);
+        }
+
+        .screen-time {
+            background: var(--light-primary);
+            padding: 2.5rem;
+            border-radius: 20px;
+            box-shadow: 0 4px 25px rgba(0, 0, 0, 0.1);
+            margin: 2rem 0;
+            text-align: center;
+            border: 2px solid var(--accent-dark);
+        }
+
+        .screen-time h2 {
+            color: var(--dark-primary);
+            margin-bottom: 1rem;
+            font-size: 1.8rem;
+        }
+
+        .screen-time p {
+            font-size: 1.2rem;
+            color: var(--text-dark);
+        }
+
+        .screen-time strong {
+            color: var(--highlight);
+            font-size: 1.6rem;
+        }
+
+        #resetScreenTime {
+            background: var(--dark-primary);
+            color: var(--text-light);
+            border-radius: 25px;
+            cursor: pointer;
+            padding: 1rem; 
+            border: none; 
+            font-size: 1.1rem; 
+            transition: all .3s ease; 
+            display: block; 
+            margin: 2rem auto; 
+            box-shadow: 0px -4px -10px rgba(155, 143, 204, .3); 
+            position: relative; 
+            overflow: hidden; 
+            z-index: 10; 
+            border: 2px solid transparent; 
+        }
+        
+        #resetScreenTime:hover { 
+            background: var(--highlight); 
+            transform: translateY(-2px); 
+            box-shadow: rgba(155, 143, 204, .3) -4px -4px -10px; 
+            border-color: var(--accent-dark); 
+        }
+        
+        .container > p { 
+            color: var(--text-light); 
+            text-align: center; 
+            font-size: 1.1rem; 
+            margin-bottom: 2rem; 
+        }
+        
+        @media (max-width: 768px) { 
+            .main-nav { 
+                flex-direction: column; 
+                padding: 1rem; 
+            }
+        
+            .nav-links { 
+                flex-direction: column; 
+                gap: 1rem; 
+                text-align: center; 
+                margin-top: 1rem; 
+            }
+        
+            .container { 
+                padding: 0 1rem; 
+            }
+        
+            body::before { 
+                height: 60%; 
+            }
+        }
+    </style>
 </head>
 <body>
     <nav class="main-nav">
         <div class="nav-brand">DetoxDroid</div>
         <ul class="nav-links">
-            <% pages.forEach(function(page) { %>
-                <li><a href="<%= page.url %>"><%= page.name %></a></li>
-            <% }); %>
-            <li><a href="/explore">Explore</a></li> <!-- Add Explore Link -->
-            <li><a href="/users-of-app">Users of App</a></li> <!-- Add Users of App Link -->
-            <li><a href="/logout">Logout</a></li>
-        </ul>
+          <% pages.forEach(function(page) { %>
+          <li><a href="<%= page.url %>"><i class="<%= page.icon %>"></i> <%= page.name %></a></li>
+          <% }); %>
+          <li><a href="/logout"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
+      </ul>
     </nav>
-
     <div class="container">
         <h1>Welcome to DetoxDroid</h1>
         <p>Choose an option from the navigation menu above to get started.</p>
 
-        <!-- Display User's Screen Time -->
         <div class="screen-time">
-            <h2>Your Screen Time</h2>
-            <p>You have been active for <strong><%= totalSeconds %></strong> seconds today.</p>
-        </div>
+          <h2><i class="fas fa-clock"></i> Your Screen Time</h2>
+          <p>You have been active for <strong id="screenTimeDisplay"><%= totalSeconds %></strong> seconds today.</p>
+      </div>
 
-        <!-- Optional: Add a button to reset screen time -->
-        <button id="resetScreenTime" onclick="resetScreenTime()">Reset Screen Time</button>
+      <button id="resetScreenTime"><i class="fas fa-redo"></i> Reset Screen Time</button>
 
-        <!-- Optional: Add a script to reset the screen time -->
-        <script>
-            function resetScreenTime() {
-                // Updated endpoint for resetting screen time
-                fetch('/api/screen-time/reset', { method: 'POST' })
-                    .then(response => {
-                        if (response.ok) {
-                            alert('Screen time reset successfully!');
-                            location.reload(); // Reload the page to update screen time
-                        } else {
-                            alert('Failed to reset screen time.');
-                        }
-                    });
-            }
-        </script>
-    </div>
+      <script>
+          // Get the display element
+          const screenTimeDisplay = document.getElementById('screenTimeDisplay');
+          let currentSeconds = parseInt('<%= totalSeconds %>');
 
-    <script>
-        // Update screen time using the new endpoint
-        setInterval(() => {
-            fetch('/api/screen-time/update', { method: 'POST' })
-                .then(response => {
-                    if (response.ok) {
-                        console.log('Screen time updated');
-                    } else {
-                        console.error('Failed to update screen time:', response.status);
-                    }
-                })
-                .catch(error => console.error('Error updating screen time:', error));
-        }, 1000); // Update every second
-    </script>
+          // Update screen time every second
+          setInterval(() => {
+              fetch('/api/screen-time/update', {
+                  method: 'POST',
+                  headers: {
+                      'Content-Type': 'application/json'
+                  },
+                  credentials: 'same-origin'
+              })
+              .then(response => {
+                  if (response.ok) {
+                      currentSeconds++;
+                      screenTimeDisplay.textContent = currentSeconds;
 
-    <script src="/js/main.js"></script>
+                      // Check if total seconds exceed or equal to (20 minutes)
+                      if (currentSeconds >= 1200) { // 1200 seconds = 20 minutes
+                          const userResponse = confirm("You've been working for over **20 minutes**. Would you like to take a break?");
+                          if (userResponse) {
+                              fetch('/api/screen-time/reset', {
+                                  method: 'POST',
+                                  headers: {
+                                      'Content-Type': 'application/json'
+                                  },
+                                  credentials: 'same-origin'
+                              })
+                              .then(res => {
+                                  if (res.ok) {
+                                      currentSeconds = 0; // Reset seconds
+                                      screenTimeDisplay.textContent = '0'; // Update display
+                                      alert('Screen time reset successfully!');
+                                  } else {
+                                      alert('Failed to reset screen time.');
+                                  }
+                              })
+                              .catch(error => console.error('Error resetting screen time:', error));
+                          }
+                      }
+                  }
+              })
+              .catch(error => console.error('Error updating screen time:', error));
+          }, 1000);
+
+          // Reset screen time
+          document.getElementById('resetScreenTime').addEventListener('click', function() {
+              fetch('/api/screen-time/reset', {
+                  method: 'POST',
+                  headers: {
+                      'Content-Type': 'application/json'
+                  },
+                  credentials: 'same-origin'
+              })
+              .then(response => {
+                  if (response.ok) {
+                      currentSeconds = 0; // Reset seconds
+                      screenTimeDisplay.textContent = '0'; // Update display
+                      alert('Screen time reset successfully!');
+                  } else {
+                      alert('Failed to reset screen time.');
+                  }
+              })
+              .catch(error => console.error('Error resetting screen time:', error));
+          });
+      </script>
+  </div>
 </body>
 </html>
