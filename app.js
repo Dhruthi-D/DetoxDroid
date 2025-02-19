@@ -189,43 +189,38 @@ app.post('/reset-screen-time', checkAuth, (req, res) => {
     res.sendStatus(200);
 });
 
-app.post("/delete-post", checkAuth, (req, res) => {
+app.post("/delete-post", checkAuth, async (req, res) => {
     const { postId } = req.body;
     const userId = req.session.uid;
-    
-    // Find post index
-    const postIndex = posts.findIndex(post => 
-        post.id === parseInt(postId) && post.userId === userId
-    );
-    
-    if (postIndex !== -1) {
-        // Remove from local array
-        const deletedPost = posts.splice(postIndex, 1)[0];
-        
-        // Remove from Firebase
-        db.ref(`users/${userId}/posts`)
-            .orderByChild('id')
-            .equalTo(parseInt(postId))
-            .once('value')
-            .then((snapshot) => {
-                snapshot.forEach((child) => {
-                    child.ref.remove();
-                });
-            });
-        
-        // Delete associated image if exists
-        if (deletedPost.image) {
-            const imagePath = path.join(__dirname, 'public', deletedPost.image);
-            fs.unlink(imagePath, (err) => {
-                if (err) console.error("Error deleting image:", err);
-            });
+
+    try {
+        const postRef = db.ref(`users/${userId}/posts/${postId}`);
+        const snapshot = await postRef.once('value');
+        const post = snapshot.val();
+
+        if (!post) {
+            return res.status(404).send("Post not found");
         }
-        
-        savePosts();
+
+        // Delete the image if it exists
+        if (post.image) {
+            const imagePath = path.join(__dirname, 'public', post.image);
+            try {
+                fs.unlinkSync(imagePath);
+            } catch (err) {
+                console.error("Error deleting image:", err);
+            }
+        }
+
+        // Delete the post
+        await postRef.remove();
+        res.redirect("/dashboard");
+    } catch (error) {
+        console.error("Error deleting post:", error);
+        res.status(500).send("Error deleting post");
     }
-    
-    res.redirect("/dashboard");
 });
+
 
 
 app.get('/login', (req, res) => {
@@ -334,16 +329,39 @@ app.get('/logout', (req, res) => {
 });
 
 app.get("/dashboard", checkAuth, async (req, res) => {
-    const userId = req.session.uid;
-    const userPostsRef = db.ref(`users/${userId}/posts`);
-    const postsSnapshot = await userPostsRef.once('value');
-    
-    const userPosts = [];
-    postsSnapshot.forEach(post => {
-        userPosts.push(post.val());
-    });
+    try {
+        const userId = req.session.uid;
+        const userPostsRef = db.ref(`users/${userId}/posts`);
+        const snapshot = await userPostsRef.once('value');
+        
+        const posts = [];
+        snapshot.forEach(childSnapshot => {
+            const post = childSnapshot.val();
+            if (post && post.title) { // Basic validation
+                posts.push({
+                    id: childSnapshot.key,
+                    ...post,
+                    likes: post.likes || 0,
+                    dislikes: post.dislikes || 0,
+                    comments: post.comments || [],
+                    dislikeReasons: post.dislikeReasons || []
+                });
+            }
+        });
+        
+        // Sort posts by creation date (newest first)
+        const sortedPosts = posts.sort((a, b) => {
+            return (b.createdAt || 0) - (a.createdAt || 0);
+        });
 
-    res.render("dashboard", { posts: userPosts, user: req.session });
+        res.render("dashboard", { 
+            posts: sortedPosts,
+            user: req.session 
+        });
+    } catch (error) {
+        console.error("Error fetching posts:", error);
+        res.status(500).send("Error loading dashboard");
+    }
 });
 
 
@@ -404,8 +422,15 @@ app.get("/mood-board", checkAuth, async (req, res) => {
         }
     });
 
-    res.render("mood-board", { moodData, negativeCount });
+    // Check user screen time
+    const totalMinutes = screenTime[userId]?.totalMinutes || 0;
+
+    // Determine if a prompt should be shown
+    const promptBreak = totalMinutes > 60 || negativeCount > 0; // Example thresholds
+
+    res.render("mood-board", { moodData, negativeCount, promptBreak });
 });
+
 
 
     // Check user screen time
@@ -424,27 +449,29 @@ function pushMoodBoardToFirebase(moodData) {
 
 
 // Post routes
-app.post("/add-post", uploadPostImage.single("image"), checkAuth, (req, res) => {
-    const { title, content, category } = req.body; // Ensure 'category' is included here
+app.post("/add-post", uploadPostImage.single("image"), checkAuth, async (req, res) => {
+    const { title, content, category } = req.body;
+    const userId = req.session.uid;
     const image = req.file ? `/uploads/${req.file.filename}` : null;
 
     const newPost = {
+        //id: generateUniqueId(),
         title,
         content,
         image,
         category,
         createdAt: Date.now(),
-        userId: req.session.uid,
-        dislikeReasons: [], // Initialize this field
+        userId,
+        dislikeReasons: [],
         likes: 0,
         dislikes: 0,
         comments: []
     };
 
-    posts.push(newPost); // Add post to local array
-    pushToFirebase(req); // Save to Firebase
+    // Add to Firebase directly
+    await db.ref(`users/${userId}/posts/${newPost.id}`).set(newPost);
     res.redirect("/dashboard");
-});
+});;
 
 
 app.get('/posts/:category', (req, res) => {
@@ -466,83 +493,116 @@ app.get('/posts/:category', (req, res) => {
     });
 });
 
-app.post("/add-comment", checkAuth, (req, res) => {
-    const { postId, comment } = req.body; // Get postId and comment text from request body
+app.post("/add-comment", checkAuth, async (req, res) => {
+    const { postId, comment } = req.body;
     const userId = req.session.uid;
 
-    // Find the post by ID
-    const post = posts.find(p => p.id === parseInt(postId));
-    if (post) {
-        // Add the new comment
-        post.comments.push({ text: comment, userId }); // Assuming you want to store user ID too
-        savePosts(); // Save updated posts array to file or database
+    if (!comment || !comment.trim()) {
+        return res.status(400).send("Comment cannot be empty");
     }
 
-    res.redirect("/dashboard");
+    try {
+        const postRef = db.ref(`users/${userId}/posts/${postId}`);
+        const snapshot = await postRef.once('value');
+        const post = snapshot.val();
+
+        if (!post) {
+            return res.status(404).send("Post not found");
+        }
+
+        const newComment = {
+            id: Date.now().toString(),
+            text: comment.trim(),
+            userId,
+            createdAt: Date.now()
+        };
+
+        const updatedPost = {
+            ...post,
+            comments: [...(post.comments || []), newComment]
+        };
+
+        await postRef.set(updatedPost);
+        res.redirect("/dashboard");
+    } catch (error) {
+        console.error("Error adding comment:", error);
+        res.status(500).send("Error adding comment");
+    }
 });
 
 
 
-app.post("/like-post", checkAuth, (req, res) => {
-    const { postId } = req.body;
+app.post("/like-post", checkAuth, async (req, res) => {
+    const { postId, postAuthorId } = req.body;
     const userId = req.session.uid;
-    
-    const post = posts.find(post => post.id === parseInt(postId));
-    if (post) {
-        // Update local array
-        if (!post.likes) post.likes = 0;
-        post.likes++;
-        
-        // Update in Firebase
-        db.ref(`users/${post.userId}/posts`)
-            .orderByChild('id')
-            .equalTo(parseInt(postId))
-            .once('value')
-            .then((snapshot) => {
-                snapshot.forEach((child) => {
-                    child.ref.update({
-                        likes: post.likes
-                    });
-                });
-            });
-        
-        savePosts();
+
+    try {
+        const postRef = db.ref(`users/${postAuthorId}/posts/${postId}`);
+        const snapshot = await postRef.once('value');
+        const post = snapshot.val();
+
+        if (!post) {
+            return res.status(404).send("Post not found");
+        }
+
+        // Update the post data
+        const updatedPost = {
+            ...post,
+            likes: (post.likes || 0) + 1,
+            likedBy: post.likedBy || []
+        };
+
+        if (!updatedPost.likedBy.includes(userId)) {
+            updatedPost.likedBy.push(userId);
+        }
+
+        await postRef.set(updatedPost);
+        res.redirect("/dashboard");
+    } catch (error) {
+        console.error("Error liking post:", error);
+        res.status(500).send("Error liking post");
     }
-    res.redirect("/dashboard");
 });
 
-app.post("/dislike-post", checkAuth, (req, res) => {
-    const { postId, reasons } = req.body;
+app.post("/dislike-post", checkAuth, async (req, res) => {
+    const { postId, postAuthorId, reasons } = req.body;
     const userId = req.session.uid;
-    
-    const post = posts.find(post => post.id === parseInt(postId));
-    if (post) {
-        // Update local array
-        if (!post.dislikes) post.dislikes = 0;
-        if (!post.dislikeReasons) post.dislikeReasons = [];
+
+    try {
+        const postRef = db.ref(`users/${postAuthorId}/posts/${postId}`);
+        const snapshot = await postRef.once('value');
+        const post = snapshot.val();
+
+        if (!post) {
+            return res.status(404).send("Post not found");
+        }
+
+        // Ensure reasons is not undefined
+        const reasonsArray = reasons ? (Array.isArray(reasons) ? reasons : [reasons]) : [];
         
-        post.dislikes++;
-        const reasonsArray = Array.isArray(reasons) ? reasons : [reasons];
-        post.dislikeReasons.push(...reasonsArray);
-        
-        // Update in Firebase
-        db.ref(`users/${post.userId}/posts`)
-            .orderByChild('id')
-            .equalTo(parseInt(postId))
-            .once('value')
-            .then((snapshot) => {
-                snapshot.forEach((child) => {
-                    child.ref.update({
-                        dislikes: post.dislikes,
-                        dislikeReasons: post.dislikeReasons
-                    });
-                });
-            });
-        
-        savePosts();
+        // Filter out any undefined values
+        const validReasons = reasonsArray.filter(reason => reason !== undefined);
+
+        // Update the post data
+        const updatedPost = {
+            ...post,
+            dislikes: (post.dislikes || 0) + 1,
+            dislikeReasons: [...(post.dislikeReasons || []), ...validReasons],
+            dislikedBy: post.dislikedBy || []
+        };
+
+        if (!updatedPost.dislikedBy.includes(userId)) {
+            updatedPost.dislikedBy.push(userId);
+        }
+
+        await postRef.set(updatedPost);
+        res.redirect("/dashboard");
+    } catch (error) {
+        console.error("Error disliking post:", error);
+        res.status(500).send("Error disliking post");
     }
-    res.redirect("/dashboard");
 });
+
 // Profile routes
 app.get("/profiles", checkAuth, (req, res) => {
     res.render("profiles", { profiles, user: req.session });
